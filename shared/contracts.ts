@@ -1,0 +1,72 @@
+import { defineRpc } from "@getpaseo/plugin";
+import { z } from "zod";
+
+export const sourceSchema = z.enum(["native", "edits"]);
+export type Source = z.infer<typeof sourceSchema>;
+export const settingsSchema = z.object({
+  defaultSource: sourceSchema.default("edits"),
+  providers: z.record(z.string().min(1).max(120), sourceSchema).default({ codex: "native" }),
+});
+export type Settings = z.infer<typeof settingsSchema>;
+export function sourceFor(settings: Settings, provider: string): Source {
+  return Object.hasOwn(settings.providers, provider)
+    ? settings.providers[provider]
+    : settings.defaultSource;
+}
+
+export const fileSummarySchema = z.object({
+  path: z.string(),
+  previousPath: z.string().nullable(),
+  additions: z.number().int().nonnegative().nullable(),
+  deletions: z.number().int().nonnegative().nullable(),
+  issue: z.string().nullable(),
+});
+export const summarySchema = z.object({
+  id: z.string().uuid(),
+  agentId: z.string(),
+  provider: z.string(),
+  source: sourceSchema,
+  startedAt: z.string(),
+  finishedAt: z.string(),
+  outcome: z.enum(["completed", "failed", "canceled", "incomplete"]),
+  issues: z.array(z.string()),
+  files: z.array(fileSummarySchema),
+  canUndo: z.boolean(),
+  undoneAt: z.string().nullable(),
+  undoState: z.enum(["ready", "applying", "failed", "done"]).default("ready"),
+});
+export type Summary = z.infer<typeof summarySchema>;
+export const cardSchema = z.object({ recordId: z.string().uuid() });
+const recordInput = z.object({ recordId: z.string().uuid(), agentId: z.string() });
+const settingsDocument = z.object({ revision: z.string(), values: settingsSchema });
+
+export const readSettings = defineRpc({
+  name: "sources.read",
+  input: z.object({}),
+  output: settingsDocument,
+});
+export const saveSettings = defineRpc({
+  name: "sources.save",
+  input: settingsDocument,
+  output: settingsDocument,
+});
+export const getSummary = defineRpc({
+  name: "changes.read",
+  input: recordInput,
+  output: summarySchema,
+});
+export const getFile = defineRpc({
+  name: "changes.file",
+  input: recordInput.extend({ index: z.number().int().nonnegative() }),
+  output: fileSummarySchema.extend({ patch: z.string() }),
+});
+export const undoChanges = defineRpc({
+  name: "changes.undo",
+  input: recordInput,
+  output: summarySchema,
+});
+export const listChanges = defineRpc({
+  name: "changes.list",
+  input: z.object({ agentId: z.string() }),
+  output: z.array(summarySchema),
+});

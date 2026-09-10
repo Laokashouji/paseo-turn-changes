@@ -1,0 +1,310 @@
+diff --git a/packages/plugin/src/server/lifecycle.ts b/packages/plugin/src/server/lifecycle.ts
+index 9115145..eafa5ae 100644
+--- a/packages/plugin/src/server/lifecycle.ts
++++ b/packages/plugin/src/server/lifecycle.ts
+@@ -51,6 +51,8 @@ export interface PluginLifecycleEvents {
+     turnId: string | null;
+     outcome: PluginTurnOutcome;
+     timeline: readonly AgentTimelineItem[];
++    /** Latest provider-native turn diff. Undefined means unavailable; null means no diff was emitted. */
++    nativeDiff?: string | null;
+   };
+   "agent.permission_requested": { agent: PluginHookAgent; request: AgentPermissionRequest };
+   "agent.permission_resolved": {
+diff --git a/packages/server/src/server/agent/agent-manager.ts b/packages/server/src/server/agent/agent-manager.ts
+index d16f0cf..4e5163a 100644
+--- a/packages/server/src/server/agent/agent-manager.ts
++++ b/packages/server/src/server/agent/agent-manager.ts
+@@ -4801,7 +4801,10 @@ export class AgentManager {
+       },
+       "agent.manager.dispatch_stream",
+     );
+-    this.dispatch({ type: "agent_stream", agentId, event, ...metadata });
++    // Native diffs belong to plugin capture, not the ordinary app stream or model history.
++    const publicEvent =
++      "nativeDiff" in event ? (({ nativeDiff: _diff, ...rest }) => rest)(event) : event;
++    this.dispatch({ type: "agent_stream", agentId, event: publicEvent, ...metadata });
+     if (this.pluginLifecycle && agent && !agent.internal && event.type !== "timeline") {
+       publishAgentStream(
+         this.pluginLifecycle,
+diff --git a/packages/server/src/server/agent/agent-sdk-types.ts b/packages/server/src/server/agent/agent-sdk-types.ts
+index 90e3004..93f8874 100644
+--- a/packages/server/src/server/agent/agent-sdk-types.ts
++++ b/packages/server/src/server/agent/agent-sdk-types.ts
+@@ -419,7 +419,13 @@ export type AgentTimelineItem =
+ export type AgentStreamEvent =
+   | { type: "thread_started"; sessionId: string; provider: AgentProvider }
+   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
+-  | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
++  | {
++      type: "turn_completed";
++      provider: AgentProvider;
++      usage?: AgentUsage;
++      turnId?: string;
++      nativeDiff?: string | null;
++    }
+   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
+   | {
+       type: "mode_changed";
+@@ -440,8 +446,15 @@ export type AgentStreamEvent =
+       code?: string;
+       diagnostic?: string;
+       turnId?: string;
++      nativeDiff?: string | null;
++    }
++  | {
++      type: "turn_canceled";
++      provider: AgentProvider;
++      reason: string;
++      turnId?: string;
++      nativeDiff?: string | null;
+     }
+-  | { type: "turn_canceled"; provider: AgentProvider; reason: string; turnId?: string }
+   | {
+       type: "timeline";
+       item: AgentTimelineItem;
+diff --git a/packages/server/src/server/agent/providers/codex-app-server-agent.test.ts b/packages/server/src/server/agent/providers/codex-app-server-agent.test.ts
+index 15e7cfd..2e7ce54 100644
+--- a/packages/server/src/server/agent/providers/codex-app-server-agent.test.ts
++++ b/packages/server/src/server/agent/providers/codex-app-server-agent.test.ts
+@@ -184,6 +184,52 @@ function createProviderWithFakeAppServer(appServer: FakeCodexAppServer): CodexAp
+   return provider;
+ }
+ 
++describe("native turn diff", () => {
++  test.each(["completed", "failed", "interrupted"])(
++    "retains only the latest diff on a %s turn without creating a tool call",
++    (status) => {
++      const session = createSession();
++      const events: AgentStreamEvent[] = [];
++      session.subscribe((event) => events.push(event));
++      const notifications = asInternals(session);
++      notifications.handleNotification("turn/started", {
++        threadId: "test-thread",
++        turn: { id: "provider-turn-1", status: "inProgress" },
++      });
++      notifications.handleNotification("turn/diff/updated", {
++        threadId: "test-thread",
++        turnId: "provider-turn-1",
++        diff: "first diff",
++      });
++      notifications.handleNotification("turn/diff/updated", {
++        threadId: "test-thread",
++        turnId: "provider-turn-1",
++        diff: "final diff",
++      });
++      notifications.handleNotification("turn/diff/updated", {
++        threadId: "test-thread",
++        turnId: "older-turn",
++        diff: "stale diff",
++      });
++      notifications.handleNotification("turn/completed", {
++        threadId: "test-thread",
++        turn: { id: "provider-turn-1", status },
++      });
++      expect(events.filter((event) => event.type === "timeline")).toEqual([]);
++      expect(events.at(-1)).toMatchObject({ nativeDiff: "final diff" });
++      notifications.handleNotification("turn/started", {
++        threadId: "test-thread",
++        turn: { id: "provider-turn-2", status: "inProgress" },
++      });
++      notifications.handleNotification("turn/completed", {
++        threadId: "test-thread",
++        turn: { id: "provider-turn-2", status: "completed" },
++      });
++      expect(events.at(-1)).toMatchObject({ nativeDiff: null });
++    },
++  );
++});
++
+ async function startPublicSteeringSession(
+   appServer: FakeCodexAppServer,
+   resolveSlashCommandInvocation?: (prompt: AgentPromptInput) => Promise<{
+@@ -5061,6 +5107,7 @@ describe("Codex app-server provider", () => {
+       type: "turn_completed",
+       provider: "codex",
+       turnId: "test-turn",
++      nativeDiff: null,
+       usage: undefined,
+     });
+   });
+@@ -5555,6 +5602,7 @@ describe("Codex app-server provider", () => {
+         type: "turn_completed",
+         provider: "codex",
+         turnId: "test-turn",
++        nativeDiff: null,
+         usage: undefined,
+       },
+     ]);
+@@ -5596,6 +5644,7 @@ describe("Codex app-server provider", () => {
+       type: "turn_completed",
+       provider: "codex",
+       turnId: "test-turn",
++      nativeDiff: null,
+       usage: {
+         inputTokens: 30000,
+         cachedInputTokens: 5000,
+diff --git a/packages/server/src/server/agent/providers/codex-app-server-agent.ts b/packages/server/src/server/agent/providers/codex-app-server-agent.ts
+index adff09d..634cda1 100644
+--- a/packages/server/src/server/agent/providers/codex-app-server-agent.ts
++++ b/packages/server/src/server/agent/providers/codex-app-server-agent.ts
+@@ -2148,6 +2148,7 @@ const TurnPlanUpdatedNotificationSchema = z
+ const TurnDiffUpdatedNotificationSchema = z
+   .object({
+     threadId: z.string().optional(),
++    turnId: z.string().optional(),
+     diff: z.string(),
+   })
+   .passthrough();
+@@ -2418,7 +2419,7 @@ type ParsedCodexNotification =
+       plan: Array<{ step: string | null; status: string | null }>;
+       threadId: string | null;
+     }
+-  | { kind: "diff_updated"; diff: string; threadId: string | null }
++  | { kind: "diff_updated"; diff: string; threadId: string | null; turnId: string | null }
+   | { kind: "token_usage_updated"; tokenUsage: unknown; threadId: string | null }
+   | { kind: "agent_message_delta"; itemId: string; delta: string; threadId: string | null }
+   | { kind: "reasoning_delta"; itemId: string; delta: string; threadId: string | null }
+@@ -2599,6 +2600,7 @@ const CodexNotificationSchema = z.union([
+         kind: "diff_updated",
+         diff: params.diff,
+         threadId: params.threadId ?? null,
++        turnId: params.turnId ?? null,
+       }),
+     ),
+   z.object({ method: z.literal("turn/diff/updated"), params: z.unknown() }).transform(
+@@ -2968,6 +2970,7 @@ const CodexNotificationSchema = z.union([
+         kind: "diff_updated",
+         diff: params.msg.unified_diff ?? params.msg.diff ?? "",
+         threadId: getCodexEventThreadId(params),
++        turnId: null,
+       }),
+     ),
+   z.object({ method: z.literal("codex/event/turn_diff"), params: z.unknown() }).transform(
+@@ -3302,6 +3305,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+   private resolvedSandboxPolicy: Record<string, unknown> | null = null;
+   private currentThreadId: string | null = null;
+   private currentTurnId: string | null = null;
++  private latestTurnDiff: string | null = null;
+   private pendingForegroundTurnIdentification: {
+     foregroundTurnId: string;
+     promise: Promise<string | null>;
+@@ -5119,6 +5123,14 @@ export class CodexAppServerAgentSession implements AgentSession {
+   }
+ 
+   private emitEvent(event: AgentStreamEvent): void {
++    const isTurnEnd =
++      event.type === "turn_completed" ||
++      event.type === "turn_failed" ||
++      event.type === "turn_canceled";
++    if (isTurnEnd) {
++      this.notifySubscribers({ ...event, nativeDiff: this.latestTurnDiff });
++      return;
++    }
+     if (this.loadingPersistedHistory && event.type === "provider_subagent") {
+       this.persistedProviderSubagentEvents.push(event);
+       return;
+@@ -5247,9 +5259,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+         this.handlePlanUpdatedNotification(parsed);
+         return;
+       case "diff_updated":
+-        // NOTE: Codex app-server emits frequent `turn/diff/updated` notifications
+-        // containing a full accumulated unified diff for the *entire turn*.
+-        // This is not a concrete file-change tool call; it is progress telemetry.
++        this.handleTurnDiffNotification(parsed);
+         return;
+       case "token_usage_updated":
+         this.handleTokenUsageUpdatedNotification(parsed);
+@@ -5924,6 +5934,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+   }
+ 
+   private resetTurnTrackingState(): void {
++    this.latestTurnDiff = null;
+     this.latestPlanResult = null;
+     this.emittedItemStartedIds.clear();
+     this.emittedItemCompletedIds.clear();
+@@ -5942,6 +5953,14 @@ export class CodexAppServerAgentSession implements AgentSession {
+     this.unpairedCompactionItemCompletions = 0;
+   }
+ 
++  private handleTurnDiffNotification(
++    parsed: Extract<ParsedCodexNotification, { kind: "diff_updated" }>,
++  ): void {
++    const matchesCurrentTurn =
++      this.currentTurnId && (!parsed.turnId || parsed.turnId === this.currentTurnId);
++    if (matchesCurrentTurn) this.latestTurnDiff = parsed.diff;
++  }
++
+   private handlePlanUpdatedNotification(
+     parsed: Extract<ParsedCodexNotification, { kind: "plan_updated" }>,
+   ): void {
+diff --git a/packages/server/src/server/plugins/lifecycle/index.ts b/packages/server/src/server/plugins/lifecycle/index.ts
+index 766ccc0..cc09258 100644
+--- a/packages/server/src/server/plugins/lifecycle/index.ts
++++ b/packages/server/src/server/plugins/lifecycle/index.ts
+@@ -103,6 +103,7 @@ export function publishAgentStream(
+       turnId: event.turnId ?? null,
+       timeline,
+       outcome: { kind: "completed" },
++      nativeDiff: event.nativeDiff,
+     });
+   } else if (event.type === "turn_failed") {
+     lifecycle.emit("agent.turn_ended", {
+@@ -110,6 +111,7 @@ export function publishAgentStream(
+       turnId: event.turnId ?? null,
+       timeline,
+       outcome: { kind: "failed", error: { message: event.error, code: event.code } },
++      nativeDiff: event.nativeDiff,
+     });
+   } else if (event.type === "turn_canceled") {
+     lifecycle.emit("agent.turn_ended", {
+@@ -117,6 +119,7 @@ export function publishAgentStream(
+       turnId: event.turnId ?? null,
+       timeline,
+       outcome: { kind: "canceled", reason: event.reason },
++      nativeDiff: event.nativeDiff,
+     });
+   } else if (event.type === "permission_requested") {
+     lifecycle.emit("agent.permission_requested", { agent, request: event.request });
+diff --git a/public-docs/plugins/v0.8/reference.md b/public-docs/plugins/v0.8/reference.md
+index 2cad2a1..02a2ed2 100644
+--- a/public-docs/plugins/v0.8/reference.md
++++ b/public-docs/plugins/v0.8/reference.md
+@@ -425,20 +425,27 @@ plans, and mode changes; requesting permission does not end the turn.
+ 
+ ### Events
+ 
+-| Name                         | Event fields                             | Trigger                                            |
+-| ---------------------------- | ---------------------------------------- | -------------------------------------------------- |
+-| `agent.created`              | `agent`                                  | Ordinary creation finishes; excludes import/resume |
+-| `agent.turn_started`         | `agent`, `turnId`                        | Live turn starts                                   |
+-| `agent.turn_ended`           | `agent`, `turnId`, `outcome`, `timeline` | Live turn completes, fails, or is canceled         |
+-| `agent.permission_requested` | `agent`, `request`                       | Permission or question becomes pending             |
+-| `agent.permission_resolved`  | `agent`, `requestId`, `resolution`       | Pending request is answered or cleared             |
+-| `agent.archived`             | `agent`, `archivedAt`                    | Archive state is saved                             |
+-| `workspace.created`          | `workspace`                              | Record created; directory available                |
+-| `workspace.archived`         | `workspace`                              | Archive state is saved                             |
++| Name                         | Event fields                                            | Trigger                                            |
++| ---------------------------- | ------------------------------------------------------- | -------------------------------------------------- |
++| `agent.created`              | `agent`                                                 | Ordinary creation finishes; excludes import/resume |
++| `agent.turn_started`         | `agent`, `turnId`                                       | Live turn starts                                   |
++| `agent.turn_ended`           | `agent`, `turnId`, `outcome`, `timeline`, `nativeDiff?` | Live turn completes, fails, or is canceled         |
++| `agent.permission_requested` | `agent`, `request`                                      | Permission or question becomes pending             |
++| `agent.permission_resolved`  | `agent`, `requestId`, `resolution`                      | Pending request is answered or cleared             |
++| `agent.archived`             | `agent`, `archivedAt`                                   | Archive state is saved                             |
++| `workspace.created`          | `workspace`                                             | Record created; directory available                |
++| `workspace.archived`         | `workspace`                                             | Archive state is saved                             |
+ 
+ Agent events exclude internal utility agents. Archive events can precede runtime/worktree cleanup;
+ `workspace.created` is not a setup barrier before agent startup.
+ 
++`agent.turn_ended.nativeDiff` optionally contains the provider's latest cumulative unified diff
++for that turn. Codex supplies the last matching `turn/diff/updated` notification, including on
++failure or cancellation. `null` means the provider emitted no diff; an omitted field means the
++provider does not expose this capability. It is delivered only to server lifecycle hooks, not
++ordinary client stream events. It describes recorded edits, not a complete Git working-tree diff.
++Plugins must verify current file contents before applying or reverting any change.
++
+ **Shared payload shapes** (`@getpaseo/plugin/server`):
+ 
+ ```ts
