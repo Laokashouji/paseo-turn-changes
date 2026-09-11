@@ -109,6 +109,7 @@ export function Review(
                   selectable
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     color,
                     fontFamily: layout.platform === "ios" ? "Menlo" : "monospace",
                     fontSize: 12,

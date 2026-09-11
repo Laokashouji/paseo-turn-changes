@@ -164,6 +164,11 @@ try {
     const undone = await rpc("changes.undo", input);
     assert.equal(undone.undoState, "done");
     assert.equal(await readFile(path.join(cwd, "file.txt"), "utf8"), "old\n");
+    await client.archiveAgent(agent.id);
+    assert.deepEqual(await rpc("changes.file", { ...input, index: 0 }), file);
+    const archivedRecords = await rpc("changes.list", { agentId: agent.id });
+    assert.equal(archivedRecords.length, 2);
+    assert.ok(archivedRecords.every((value) => value.undoState === "done"));
     evidence.push({
       provider: name,
       source: record.source,
@@ -172,6 +177,7 @@ try {
       deletions: 1,
       card: true,
       persistedAfterReload: true,
+      historyAvailableAfterArchive: true,
       multipleTurns: true,
       laterEditsProtected: true,
       undo: true,
