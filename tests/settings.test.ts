@@ -6,13 +6,17 @@ import { test } from "node:test";
 import { settingsSchema, sourceFor } from "../shared/contracts";
 import { Store } from "../server/store";
 
-test("Codex 使用原生差异，其他后端汇总编辑；显式配置覆盖默认值", () => {
+test("Codex 自动选择差异来源，其他后端汇总编辑；显式配置覆盖默认值", () => {
   const defaults = settingsSchema.parse({});
-  assert.equal(sourceFor(defaults, "codex"), "native");
+  assert.equal(sourceFor(defaults, "codex"), "auto");
   assert.equal(sourceFor(defaults, "claude"), "edits");
   assert.equal(sourceFor(defaults, "custom-provider"), "edits");
   assert.equal(sourceFor(defaults, "constructor"), "edits");
   assert.equal(sourceFor({ ...defaults, providers: { codex: "edits" } }, "codex"), "edits");
+  assert.equal(
+    sourceFor(settingsSchema.parse({ providers: { codex: "native" } }), "codex"),
+    "native",
+  );
 });
 
 test("设置持久化，并拒绝另一客户端提交的旧版本", async () => {

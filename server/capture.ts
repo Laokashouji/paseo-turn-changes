@@ -13,6 +13,7 @@ export class Capture {
 
   async start(event: TurnStart): Promise<void> {
     const { values } = await this.store.exclusive("settings", () => this.store.readSettings());
+    const requestedSource = sourceFor(values, event.agent.provider);
     const record: Record = {
       version: 1,
       id: randomUUID(),
@@ -20,7 +21,8 @@ export class Capture {
       provider: event.agent.provider,
       cwd: event.agent.cwd,
       turnId: event.turnId,
-      source: sourceFor(values, event.agent.provider),
+      source: requestedSource === "edits" ? "edits" : "native",
+      requestedSource,
       startedAt: new Date().toISOString(),
       finishedAt: "",
       outcome: "incomplete",
@@ -42,12 +44,13 @@ export class Capture {
   ): Promise<Record> {
     await this.store.observeNative(event.agent.provider, event.nativeDiff !== undefined);
     let initial = this.active.get(event.agent.id);
-    const missingStart = !initial || initial.turnId !== event.turnId;
-    if (missingStart) {
+    let missingStart = false;
+    if (!initial || initial.turnId !== event.turnId) {
       initial = (await this.store.list(event.agent.id)).find(
         (record) => !record.finishedAt && record.turnId === event.turnId,
       );
       if (!initial) {
+        missingStart = true;
         await this.start(event);
         initial = this.active.get(event.agent.id)!;
       }
@@ -60,7 +63,10 @@ export class Capture {
       files: [],
       ...(timeline ? { timeline } : {}),
     };
-    if (missingStart) record.issues.push("本轮记录期间插件曾停止或缺少开始事件，撤销不可用。");
+    if (record.requestedSource === "auto") {
+      record.source = event.nativeDiff === undefined ? "edits" : "native";
+    }
+    if (missingStart) record.issues.push("缺少本轮开始记录，撤销不可用。");
     try {
       const edits = editsFromItems(items);
       if (record.source === "native") {

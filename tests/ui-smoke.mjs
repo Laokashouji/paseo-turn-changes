@@ -87,9 +87,9 @@ try {
   await until(() => document.body.textContent.includes("桌面宽度"));
   click("数据来源设置");
   await until(() => document.querySelector('select[aria-label="codex"]'));
-  assert.equal(document.querySelector('select[aria-label="codex"]').value, "native");
+  assert.equal(document.querySelector('select[aria-label="codex"]').value, "auto");
   assert.equal(document.querySelector('select[aria-label="其他执行后端"]').value, "edits");
-  await until(() => document.body.textContent.includes("未提供原生接口信号"));
+  await until(() => document.body.textContent.includes("无原生接口信号，自动使用插件汇总"));
   const select = document.querySelector('select[aria-label="codex"]');
   select.value = "edits";
   select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));

@@ -3,12 +3,14 @@ import { z } from "zod";
 
 export const sourceSchema = z.enum(["native", "edits"]);
 export type Source = z.infer<typeof sourceSchema>;
+export const sourceModeSchema = z.enum(["auto", "native", "edits"]);
+export type SourceMode = z.infer<typeof sourceModeSchema>;
 export const settingsSchema = z.object({
-  defaultSource: sourceSchema.default("edits"),
-  providers: z.record(z.string().min(1).max(120), sourceSchema).default({ codex: "native" }),
+  defaultSource: sourceModeSchema.default("edits"),
+  providers: z.record(z.string().min(1).max(120), sourceModeSchema).default({ codex: "auto" }),
 });
 export type Settings = z.infer<typeof settingsSchema>;
-export function sourceFor(settings: Settings, provider: string): Source {
+export function sourceFor(settings: Settings, provider: string): SourceMode {
   return Object.hasOwn(settings.providers, provider)
     ? settings.providers[provider]
     : settings.defaultSource;
@@ -26,6 +28,7 @@ export const summarySchema = z.object({
   agentId: z.string(),
   provider: z.string(),
   source: sourceSchema,
+  requestedSource: sourceModeSchema.optional(),
   startedAt: z.string(),
   finishedAt: z.string(),
   outcome: z.enum(["completed", "failed", "canceled", "incomplete"]),

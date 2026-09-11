@@ -13,11 +13,12 @@ import {
   readSettings,
   saveSettings,
   type Settings,
-  type Source,
+  type SourceMode,
 } from "../shared/contracts";
 import { Action } from "./card";
 
-const options: { label: string; value: Source }[] = [
+const options: { label: string; value: SourceMode }[] = [
+  { label: "自动（优先原生）", value: "auto" },
   { label: "原生本轮差异", value: "native" },
   { label: "插件汇总编辑", value: "edits" },
 ];
@@ -66,12 +67,12 @@ export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
                   mutation.mutate({ ...values, providers: { ...values.providers, [id]: next } })
                 }
               />
-              {source === "native" && (
+              {source !== "edits" && (
                 <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
                   {native.isError
                     ? `原生数据状态读取失败：${native.error.message}`
                     : native.data?.[id]
-                      ? `最近一轮：${native.data[id].available ? "已接收到原生接口信号" : "未提供原生接口信号，需要接入补丁"}（${new Date(native.data[id].observedAt).toLocaleString()}）`
+                      ? `最近一轮：${native.data[id].available ? "已接收到原生接口信号" : source === "auto" ? "无原生接口信号，自动使用插件汇总" : "未提供原生接口信号，需要接入补丁"}（${new Date(native.data[id].observedAt).toLocaleString()}）`
                       : "尚未确认原生接口。启用后完成一轮对话即可检查。"}
                 </Text>
               )}
@@ -142,8 +143,8 @@ export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
         </View>
       )}
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
-        原生差异需要 Paseo
-        提供相应数据。数据不可用时会明确提示，不会自动改用插件汇总。插件汇总只覆盖执行后端提供的文件编辑记录。
+        自动模式每轮优先使用原生差异，没有原生接口信号时使用插件汇总。选择“原生本轮差异”会固定来源。
+        插件汇总只覆盖结构化文件编辑记录，可能遗漏 Shell 直接写入的文件。
       </Text>
     </View>
   );

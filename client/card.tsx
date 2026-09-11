@@ -125,6 +125,7 @@ function CardBody(
           {summary.source === "native"
             ? `${summary.provider === "codex" ? "Codex" : summary.provider} 原生差异`
             : "文件编辑记录汇总"}
+          {summary.requestedSource === "auto" ? " · 自动选择" : ""}
           {summary.outcome === "failed" ? " · 本轮执行失败" : ""}
           {summary.outcome === "canceled" ? " · 本轮已中断" : ""}
           {summary.undoneAt ? " · 已撤销" : ""}

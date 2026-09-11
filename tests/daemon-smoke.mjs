@@ -54,7 +54,7 @@ function provider(name) {
             detail: { type: "edit", filePath: file, unifiedDiff: diff },
           },
         });
-        callback(name === "codex" ? { ...event, nativeDiff: diff } : event);
+        callback(name === "codex" && number > 1 ? { ...event, nativeDiff: diff } : event);
       });
     return session;
   };
@@ -97,7 +97,7 @@ try {
   const rpc = (method, input) => client.invokePluginRpc("turn-changes", method, input);
   assert.deepEqual(await rpc("sources.native-status", {}), {});
   const config = await rpc("sources.read", {});
-  assert.equal(config.values.providers.codex, "native");
+  assert.equal(config.values.providers.codex, "auto");
   assert.equal(config.values.defaultSource, "edits");
   const saved = await rpc("sources.save", { revision: config.revision, values: config.values });
   await assert.rejects(
@@ -121,9 +121,9 @@ try {
       (value) => value.some((record) => record.finishedAt),
     );
     const record = records.find((value) => value.finishedAt);
-    assert.equal(record.source, name === "codex" ? "native" : "edits");
+    assert.equal(record.source, "edits");
     assert.equal(record.canUndo, true, JSON.stringify(record));
-    assert.equal((await rpc("sources.native-status", {}))[name].available, name === "codex");
+    assert.equal((await rpc("sources.native-status", {}))[name].available, false);
     assert.deepEqual(
       record.files.map((file) => [file.path, file.additions, file.deletions]),
       [["file.txt", 1, 1]],
@@ -149,6 +149,8 @@ try {
       (value) => value.filter((record) => record.finishedAt).length === 2,
     );
     const second = secondRecords.find((value) => value.id !== record.id && value.finishedAt);
+    assert.equal(second.source, name === "codex" ? "native" : "edits");
+    assert.equal((await rpc("sources.native-status", {}))[name].available, name === "codex");
     assert.equal(second.canUndo, true, JSON.stringify(second));
     const secondInput = { recordId: second.id, agentId: agent.id };
     const secondFile = await rpc("changes.file", { ...secondInput, index: 0 });
@@ -172,6 +174,7 @@ try {
     evidence.push({
       provider: name,
       source: record.source,
+      secondSource: second.source,
       files: 1,
       additions: 1,
       deletions: 1,

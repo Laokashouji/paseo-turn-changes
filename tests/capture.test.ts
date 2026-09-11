@@ -12,6 +12,11 @@ test("本轮固定使用开始时的配置，Codex 原生数据缺失不切换�
   try {
     const store = new Store(path.join(cwd, "state"));
     const capture = new Capture(store);
+    const originalConfig = await store.readSettings();
+    await store.saveSettings(originalConfig.revision, {
+      ...originalConfig.values,
+      providers: { codex: "native" },
+    });
     const start: TurnStart = {
       agent: {
         id: "codex-agent",
@@ -89,6 +94,8 @@ test("未提供原生接口时，即使没有编辑条目也明确提示，并�
   try {
     const store = new Store(path.join(cwd, "state"));
     const capture = new Capture(store);
+    const config = await store.readSettings();
+    await store.saveSettings(config.revision, { ...config.values, providers: { codex: "native" } });
     const event: TurnEnd = {
       agent: {
         id: "agent",
@@ -120,7 +127,84 @@ test("未提供原生接口时，即使没有编辑条目也明确提示，并�
   }
 });
 
-test("中途重载保留开始时的数据来源，但不开放不完整轮次的撤销", async () => {
+test("自动模式按本轮信号选择来源，保留固定配置和历史来源", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "turn-auto-"));
+  try {
+    const store = new Store(path.join(cwd, "state"));
+    const capture = new Capture(store);
+    const event: TurnEnd = {
+      agent: {
+        id: "auto-agent",
+        workspaceId: null,
+        parentAgentId: null,
+        provider: "codex",
+        cwd,
+        title: null,
+      },
+      turnId: "without-patch",
+      outcome: { kind: "completed" },
+      timeline: [],
+    };
+    const patch = createTwoFilesPatch("file", "file", "old\n", "new\n");
+    const edit = {
+      type: "tool_call",
+      status: "completed",
+      detail: { type: "edit", filePath: "file", unifiedDiff: patch },
+    };
+    await writeFile(path.join(cwd, "file"), "new\n");
+    await capture.start(event);
+    const fallback = await capture.finish(event, [edit]);
+    assert.equal(fallback.requestedSource, "auto");
+    assert.equal(fallback.source, "edits");
+    assert.deepEqual(fallback.issues, []);
+    assert.equal(fallback.canUndo, true);
+    assert.equal(fallback.files[0].before?.text, "old\n");
+
+    const withPatch = { ...event, turnId: "with-patch", nativeDiff: patch };
+    await capture.start(withPatch);
+    const config = await store.readSettings();
+    await store.saveSettings(config.revision, { ...config.values, providers: { codex: "edits" } });
+    const native = await capture.finish(withPatch, []);
+    assert.equal(native.source, "native");
+    assert.equal(native.requestedSource, "auto");
+    assert.equal(native.canUndo, true);
+    assert.equal(native.files.length, 1);
+    const forced = { ...withPatch, turnId: "forced-edits" };
+    await capture.start(forced);
+    assert.equal((await capture.finish(forced, [edit])).source, "edits");
+    assert.equal((await store.get(fallback.id, event.agent.id)).source, "edits");
+
+    const current = await store.readSettings();
+    await store.saveSettings(current.revision, { ...current.values, providers: { codex: "auto" } });
+    for (const [turnId, signal] of [
+      ["empty-diff", ""],
+      ["no-changes", null],
+    ] as const) {
+      const empty = { ...event, turnId, nativeDiff: signal };
+      await capture.start(empty);
+      const result = await capture.finish(empty, []);
+      assert.equal(result.source, "native");
+      assert.deepEqual(result.files, []);
+      assert.deepEqual(result.issues, []);
+    }
+    const noSignal = { ...event, turnId: "no-signal-again" };
+    await capture.start(noSignal);
+    const result = await capture.finish(noSignal, []);
+    assert.equal(result.source, "edits");
+    assert.deepEqual(result.issues, []);
+    assert.deepEqual(result.files, []);
+
+    const incomplete = { ...event, turnId: "incomplete" };
+    await capture.start(incomplete);
+    const failed = await capture.finish(incomplete, [edit], "历史分页不完整");
+    assert.equal(failed.canUndo, false);
+    assert.deepEqual(failed.issues, ["历史分页不完整"]);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("重载后恢复持久化的开始记录，缺少开始记录时仍禁止撤销", async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), "turn-capture-"));
   try {
     const store = new Store(path.join(cwd, "state"));
@@ -136,8 +220,9 @@ test("中途重载保留开始时的数据来源，但不开放不完整轮次�
       turnId: "turn",
       outcome: { kind: "completed" },
       timeline: [],
-      nativeDiff: "",
+      nativeDiff: createTwoFilesPatch("file", "file", "old\n", "new\n"),
     };
+    await writeFile(path.join(cwd, "file"), "new\n");
     await new Capture(store).start(event);
     const original = (await store.list("agent"))[0];
     const settings = await store.readSettings();
@@ -148,8 +233,12 @@ test("中途重载保留开始时的数据来源，但不开放不完整轮次�
     const result = await new Capture(store).finish(event, []);
     assert.equal(result.id, original.id);
     assert.equal(result.source, "native");
-    assert.equal(result.canUndo, false);
+    assert.equal(result.canUndo, true);
+    assert.deepEqual(result.issues, []);
     assert.equal((await store.list("agent")).length, 1);
+    const missing = await new Capture(store).finish({ ...event, turnId: "missing" }, []);
+    assert.equal(missing.canUndo, false);
+    assert.match(missing.issues[0], /缺少本轮开始记录/);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
