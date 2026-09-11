@@ -96,6 +96,14 @@ try {
   click("手机宽度");
   click("浅色");
   await until(() => document.body.textContent.includes("桌面宽度"));
+  click("审核");
+  await until(
+    () =>
+      document.querySelector('[role="dialog"]') &&
+      document.body.textContent.includes("const source = 'native';"),
+  );
+  click("关闭弹窗");
+  await until(() => !document.querySelector('[role="dialog"]'));
   click("数据来源设置");
   await until(() => document.querySelector('select[aria-label="codex"]'));
   assert.equal(document.querySelector('select[aria-label="codex"]').value, "auto");
@@ -123,6 +131,7 @@ try {
       "undo conflict message",
       "undo success",
       "compact/light render",
+      "compact review opens visible modal",
       "provider settings persisted through RPC",
       "native source availability",
       "remove provider override",

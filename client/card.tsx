@@ -63,7 +63,7 @@ function CardBody(
   const [navigationError, setNavigationError] = useState<string | null>(null);
   function openReview(index: number) {
     setNavigationError(null);
-    if (!navigation || !props.workspaceId) {
+    if (layout.compact || !navigation || !props.workspaceId) {
       setReviewIndex(index);
       return;
     }
