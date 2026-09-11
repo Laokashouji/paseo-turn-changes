@@ -130,7 +130,11 @@ function CardBody(
                   fontSize: 12,
                 }}
               >
-                {summary.finishedAt ? "部分文件仅提供编辑内容" : "轮次结束后生成文件列表"}
+                {summary.finishedAt
+                  ? summary.files.length
+                    ? "部分文件仅提供编辑内容"
+                    : "改动记录不完整"
+                  : "轮次结束后生成文件列表"}
               </Text>
             )}
           </View>
