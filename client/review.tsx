@@ -1,9 +1,11 @@
-import { Text, View } from "react-native";
+import { useMemo } from "react";
+import { Text, View, useWindowDimensions } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRpc, type PluginHostProps } from "@getpaseo/plugin/client";
 import { FlatList } from "@getpaseo/plugin/client/react-native";
 import { getFile, type Summary } from "../shared/contracts";
 import { Action } from "./card";
+import { diffLines } from "../shared/diff-lines";
 
 export function Review(
   props: PluginHostProps & {
@@ -16,12 +18,19 @@ export function Review(
 ) {
   const { theme, host, layout, agentId, recordId, summary, index, setIndex } = props;
   const read = useRpc(getFile);
+  const { height } = useWindowDimensions();
   const query = useQuery({
     queryKey: [host.id, "turn-file", agentId, recordId, index],
     queryFn: () => read({ agentId, recordId, index }),
   });
+  const lines = useMemo(() => diffLines(query.data?.patch ?? ""), [query.data?.patch]);
   return (
-    <View style={{ height: layout.compact ? 430 : 600, backgroundColor: theme.colors.surface0 }}>
+    <View
+      style={{
+        height: Math.min(layout.compact ? 430 : 600, Math.max(180, height - 200)),
+        backgroundColor: theme.colors.surface0,
+      }}
+    >
       <View
         style={{ padding: 12, gap: 10, borderBottomWidth: 1, borderColor: theme.colors.border }}
       >
@@ -61,26 +70,55 @@ export function Review(
       {query.data && (
         <FlatList
           style={{ flex: 1 }}
-          data={query.data.patch.split("\n")}
+          data={lines}
           keyExtractor={(_, line) => String(line)}
           renderItem={({ item: line }) => {
             let color = theme.colors.foreground;
-            if (line.startsWith("+") && !line.startsWith("+++")) color = theme.colors.statusSuccess;
-            if (line.startsWith("-") && !line.startsWith("---")) color = theme.colors.statusDanger;
-            if (line.startsWith("@@")) color = theme.colors.accent;
+            if (line.kind === "add") color = theme.colors.statusSuccess;
+            if (line.kind === "delete") color = theme.colors.statusDanger;
+            if (line.kind === "meta") color = theme.colors.foregroundMuted;
             return (
-              <Text
-                selectable
-                style={{
-                  color,
-                  fontFamily: layout.platform === "ios" ? "Menlo" : "monospace",
-                  fontSize: 12,
-                  lineHeight: 20,
-                  paddingHorizontal: 12,
-                }}
-              >
-                {line || " "}
-              </Text>
+              <View style={{ flexDirection: "row", paddingHorizontal: 8 }}>
+                <Text
+                  accessibilityLabel={line.oldLine === null ? "" : `原行号 ${line.oldLine}`}
+                  style={{
+                    color: theme.colors.foregroundMuted,
+                    width: 42,
+                    textAlign: "right",
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    lineHeight: 20,
+                  }}
+                >
+                  {line.oldLine ?? ""}
+                </Text>
+                <Text
+                  accessibilityLabel={line.newLine === null ? "" : `新行号 ${line.newLine}`}
+                  style={{
+                    color: theme.colors.foregroundMuted,
+                    width: 42,
+                    textAlign: "right",
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    lineHeight: 20,
+                  }}
+                >
+                  {line.newLine ?? ""}
+                </Text>
+                <Text
+                  selectable
+                  style={{
+                    flex: 1,
+                    color,
+                    fontFamily: layout.platform === "ios" ? "Menlo" : "monospace",
+                    fontSize: 12,
+                    lineHeight: 20,
+                    paddingHorizontal: 12,
+                  }}
+                >
+                  {line.text || " "}
+                </Text>
+              </View>
             );
           }}
         />

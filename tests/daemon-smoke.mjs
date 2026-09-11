@@ -7,7 +7,9 @@ import { pathToFileURL } from "node:url";
 import { createTwoFilesPatch } from "diff";
 
 const source = path.resolve(process.argv[2] || "../paseo-turn-diff-host");
-const plugin = path.resolve(import.meta.dirname, "..");
+const plugin = path.resolve(
+  process.env.PASEO_TEST_PLUGIN_ROOT || path.join(import.meta.dirname, ".."),
+);
 const load = (name) => import(pathToFileURL(path.join(source, name)).href);
 const { createTestPaseoDaemon } = await load(
   "packages/server/src/server/test-utils/paseo-daemon.ts",
@@ -72,7 +74,7 @@ let daemon;
 let client;
 try {
   daemon = await createTestPaseoDaemon({
-    daemonVersion: "0.8.0-beta.1",
+    daemonVersion: "0.8.0",
     agentClients: { codex: provider("codex"), claude: provider("claude") },
   });
   const terminalEvents = [];
@@ -85,7 +87,7 @@ try {
   );
   client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
-    appVersion: "0.8.0-beta.1",
+    appVersion: "0.8.0",
   });
   await client.connect();
   await client.fetchAgents({ subscribe: { subscriptionId: "turn-changes-smoke" } });
@@ -93,6 +95,7 @@ try {
   const installed = await client.installDirectoryPlugin(plugin);
   console.log("plugin installation:", JSON.stringify(installed));
   const rpc = (method, input) => client.invokePluginRpc("turn-changes", method, input);
+  assert.deepEqual(await rpc("sources.native-status", {}), {});
   const config = await rpc("sources.read", {});
   assert.equal(config.values.providers.codex, "native");
   assert.equal(config.values.defaultSource, "edits");
@@ -120,6 +123,7 @@ try {
     const record = records.find((value) => value.finishedAt);
     assert.equal(record.source, name === "codex" ? "native" : "edits");
     assert.equal(record.canUndo, true, JSON.stringify(record));
+    assert.equal((await rpc("sources.native-status", {}))[name].available, name === "codex");
     assert.deepEqual(
       record.files.map((file) => [file.path, file.additions, file.deletions]),
       [["file.txt", 1, 1]],
@@ -179,7 +183,7 @@ try {
     "native diff must not be broadcast to ordinary clients",
   );
   const output = {
-    daemonVersion: "0.8.0-beta.1",
+    daemonVersion: "0.8.0",
     providerInput: "scripted fixture events",
     results: evidence,
   };

@@ -9,6 +9,7 @@ import {
   readSettings,
   saveSettings,
   undoChanges,
+  getNativeStatus,
 } from "../shared/contracts";
 import { Capture } from "./capture";
 import { message } from "./differences";
@@ -36,6 +37,7 @@ export function contribute(server: PluginServerContext) {
   }
 
   server.handle(readSettings, () => store.readSettings());
+  server.handle(getNativeStatus, () => store.nativeStatus());
   server.handle(saveSettings, (input) => store.saveSettings(input.revision, input.values));
   server.handle(getSummary, async (input) =>
     summarize(await store.get(input.recordId, input.agentId)),

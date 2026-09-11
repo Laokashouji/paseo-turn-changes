@@ -4,16 +4,17 @@ Paseo 插件，按一轮 Agent 执行汇总文件改动。在回答后显示文�
 
 ## 当前状态
 
-- 已在隔离的 Paseo `0.8.0-beta.1` daemon 验证插件安装、两种来源、连续两轮、历史持久化和撤销。
+- 已在隔离的 Paseo `0.8.0` 正式版 daemon 验证插件安装、两种来源、连续两轮、历史持久化和撤销。仅安装生产依赖的源码也通过相同验证。
 - 默认 Codex 使用原生累计差异，其他执行后端由插件汇总结构化编辑记录。
 - Codex 路径需要本仓库的接入补丁；纯插件路径只需要 Paseo 0.8 的生命周期接口。
-- 尚未安装到主力 daemon；真实模型会话和真实 Paseo 客户端 UI 尚未验收。自动集成测试使用脚本构造的 provider 事件。
+- Devbox 的正式版主 daemon 已安装插件。真实 Claude 会话已验证文件统计、差异卡片、后续修改保护和撤销；真实 Codex 会话确认未加载补丁时明确提示数据缺失，没有切换来源。
+- Codex 原生路径目前通过了脚本事件集成测试与宿主 153 项接入测试，主 daemon 尚未加载补丁。真实 Paseo 客户端 UI 尚未验收；组件交互检查使用 React Native Web 和 jsdom。
 
 ## 界面入口
 
 有改动的轮次结束后，对话中增加一张“已编辑 N 个文件”卡片。没有改动且没有异常时不插入空卡片。文件列表默认显示前六项，可以展开全部。历史卡片的差异保存在生成时，不随后续编辑或 Git 提交变化。
 
-- 点击文件或“审核”：按文件查看红绿行差异，可切换上一个、下一个文件。
+- 点击文件或“审核”：按文件查看红绿行差异及新旧行号，可切换上一个、下一个文件；审核区域随视口高度调整。
 - 点击“撤销”：二次确认后撤销整轮。任何文件出现后续修改时，整轮拒绝撤销。
 - 工作区的“每轮改动”面板：查看当前 Agent 的历史记录。
 - 命令中心：“查看每轮改动”“配置每轮改动来源”。
@@ -35,6 +36,8 @@ Paseo 插件，按一轮 Agent 执行汇总文件改动。在回答后显示文�
 `native` 表示执行后端的原生本轮差异，`edits` 表示插件汇总文件编辑记录。匹配的是 provider ID，不是模型名称。自定义 Codex provider ID 可在设置中单独添加。
 
 设置从下一轮生效，历史记录保留原来源。同一 daemon 的客户端读取同一份配置；旧版本设置的保存会被拒绝，刷新后可重试。数据不足时显示说明，不会静默切换来源。
+
+设置页显示所配置原生来源最近一轮是否收到接口信号及检查时间，也可主动刷新。它是最近一次观察结果；安装后尚未完成轮次时显示“尚未确认”。移除某个执行后端的单独配置后，该后端使用“其他执行后端”的设置。
 
 ## 收集范围与撤销
 
@@ -62,7 +65,7 @@ Codex 接入层只保留当前轮次最新的 `turn/diff/updated`，在完成、
 
 ## 接入
 
-客户端和 daemon 需要匹配 Paseo 0.8 插件接口；0.7.2 不能直接安装。补丁基于官方 `v0.8.0-beta.1`，提交 `4eab53e24e1b57c74b00945aa48a89d68ed755e3`，见 [patches/codex-turn-diff.patch](patches/codex-turn-diff.patch)。补丁改动 server 内部事件和插件服务端钩子，不修改客户端协议。
+客户端和 daemon 需要匹配 Paseo 0.8 插件接口；清单要求 `>=0.8.0 <0.9.0`，不接受 0.7 或 0.8 beta。补丁基于官方 `v0.8.0`，提交 `b8e24677e12b226c7c38c1c3a40649daa9f1152f`，见 [patches/codex-turn-diff.patch](patches/codex-turn-diff.patch)。官方 0.8.0 仍会丢弃 Codex 原生累计差异事件；补丁改动 server 内部事件和插件服务端钩子，不修改客户端协议。
 
 在对应 Paseo 源码根目录应用补丁并构建：
 
@@ -79,22 +82,27 @@ npm run build:server
 
 ```sh
 cd /absolute/path/paseo-turn-changes
-npm ci --ignore-scripts
+npm ci --omit=dev --ignore-scripts
 paseo plugin install /absolute/path/paseo-turn-changes
 ```
 
 需事先开启目标 daemon 的插件功能，CLI 也需指向正确主机。多台机器分别安装和配置。
 
+从 Git 安装时，清单中的构建命令会安装锁定的生产依赖。开发检查则运行不带 `--omit=dev` 的 `npm ci --ignore-scripts`。
+
 ## 开发验证
 
 ```sh
 npm run typecheck
+npm run lint -- client server shared index.client.tsx index.server.ts
 npm test
 npm run test:ui
 npx tsx tests/daemon-smoke.mjs /absolute/path/paseo-turn-diff-host
 ```
 
 集成测试使用随机端口、独立存储和脚本测试后端，不访问主 daemon、真实模型或真实工作文件，结束后关闭临时服务并清理目录。回执在 `tmp/daemon-smoke.json`、`tmp/ui-smoke.json`。
+
+可通过 `PASEO_TEST_PLUGIN_ROOT` 指定仅安装生产依赖的插件副本，验证实际安装时的模块解析。
 
 Paseo 补丁测试在其 `packages/server` 下运行：
 

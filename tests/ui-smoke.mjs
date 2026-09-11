@@ -65,6 +65,8 @@ try {
   assert.ok(document.body.textContent.includes("−2"));
   click("审核");
   await until(() => document.body.textContent.includes("const source = 'native';"));
+  assert.ok(document.querySelector('[aria-label="原行号 1"]'));
+  assert.ok(document.querySelector('[aria-label="新行号 1"]'));
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
   click("关闭弹窗");
@@ -87,20 +89,30 @@ try {
   await until(() => document.querySelector('select[aria-label="codex"]'));
   assert.equal(document.querySelector('select[aria-label="codex"]').value, "native");
   assert.equal(document.querySelector('select[aria-label="其他执行后端"]').value, "edits");
+  await until(() => document.body.textContent.includes("未提供原生接口信号"));
   const select = document.querySelector('select[aria-label="codex"]');
   select.value = "edits";
   select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   await until(() => document.body.textContent.includes("设置已保存"));
   assert.equal(dom.window.TurnPreview.fixture.settings().values.providers.codex, "edits");
+  click("移除 codex 单独配置");
+  await until(() => !document.querySelector('select[aria-label="codex"]'));
+  assert.equal(
+    Object.hasOwn(dom.window.TurnPreview.fixture.settings().values.providers, "codex"),
+    false,
+  );
   const evidence = {
     runtime: "jsdom + React Native Web; simulated host controls and RPC data",
     assertions: [
       "file totals",
       "review file navigation",
+      "original and updated line numbers",
       "undo conflict message",
       "undo success",
       "compact/light render",
       "provider settings persisted through RPC",
+      "native source availability",
+      "remove provider override",
     ],
     realBrowserVerified: false,
   };

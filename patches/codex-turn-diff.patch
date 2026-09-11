@@ -12,10 +12,10 @@ index 9115145..eafa5ae 100644
    "agent.permission_requested": { agent: PluginHookAgent; request: AgentPermissionRequest };
    "agent.permission_resolved": {
 diff --git a/packages/server/src/server/agent/agent-manager.ts b/packages/server/src/server/agent/agent-manager.ts
-index d16f0cf..4e5163a 100644
+index 70b4e62..3521527 100644
 --- a/packages/server/src/server/agent/agent-manager.ts
 +++ b/packages/server/src/server/agent/agent-manager.ts
-@@ -4801,7 +4801,10 @@ export class AgentManager {
+@@ -4883,7 +4883,10 @@ export class AgentManager {
        },
        "agent.manager.dispatch_stream",
      );
@@ -145,10 +145,10 @@ index 15e7cfd..2e7ce54 100644
          inputTokens: 30000,
          cachedInputTokens: 5000,
 diff --git a/packages/server/src/server/agent/providers/codex-app-server-agent.ts b/packages/server/src/server/agent/providers/codex-app-server-agent.ts
-index adff09d..634cda1 100644
+index 7123db1..cbca93b 100644
 --- a/packages/server/src/server/agent/providers/codex-app-server-agent.ts
 +++ b/packages/server/src/server/agent/providers/codex-app-server-agent.ts
-@@ -2148,6 +2148,7 @@ const TurnPlanUpdatedNotificationSchema = z
+@@ -2154,6 +2154,7 @@ const TurnPlanUpdatedNotificationSchema = z
  const TurnDiffUpdatedNotificationSchema = z
    .object({
      threadId: z.string().optional(),
@@ -156,7 +156,7 @@ index adff09d..634cda1 100644
      diff: z.string(),
    })
    .passthrough();
-@@ -2418,7 +2419,7 @@ type ParsedCodexNotification =
+@@ -2424,7 +2425,7 @@ type ParsedCodexNotification =
        plan: Array<{ step: string | null; status: string | null }>;
        threadId: string | null;
      }
@@ -165,7 +165,7 @@ index adff09d..634cda1 100644
    | { kind: "token_usage_updated"; tokenUsage: unknown; threadId: string | null }
    | { kind: "agent_message_delta"; itemId: string; delta: string; threadId: string | null }
    | { kind: "reasoning_delta"; itemId: string; delta: string; threadId: string | null }
-@@ -2599,6 +2600,7 @@ const CodexNotificationSchema = z.union([
+@@ -2605,6 +2606,7 @@ const CodexNotificationSchema = z.union([
          kind: "diff_updated",
          diff: params.diff,
          threadId: params.threadId ?? null,
@@ -173,7 +173,7 @@ index adff09d..634cda1 100644
        }),
      ),
    z.object({ method: z.literal("turn/diff/updated"), params: z.unknown() }).transform(
-@@ -2968,6 +2970,7 @@ const CodexNotificationSchema = z.union([
+@@ -2974,6 +2976,7 @@ const CodexNotificationSchema = z.union([
          kind: "diff_updated",
          diff: params.msg.unified_diff ?? params.msg.diff ?? "",
          threadId: getCodexEventThreadId(params),
@@ -181,7 +181,7 @@ index adff09d..634cda1 100644
        }),
      ),
    z.object({ method: z.literal("codex/event/turn_diff"), params: z.unknown() }).transform(
-@@ -3302,6 +3305,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+@@ -3309,6 +3312,7 @@ export class CodexAppServerAgentSession implements AgentSession {
    private resolvedSandboxPolicy: Record<string, unknown> | null = null;
    private currentThreadId: string | null = null;
    private currentTurnId: string | null = null;
@@ -189,7 +189,7 @@ index adff09d..634cda1 100644
    private pendingForegroundTurnIdentification: {
      foregroundTurnId: string;
      promise: Promise<string | null>;
-@@ -5119,6 +5123,14 @@ export class CodexAppServerAgentSession implements AgentSession {
+@@ -5162,6 +5166,14 @@ export class CodexAppServerAgentSession implements AgentSession {
    }
  
    private emitEvent(event: AgentStreamEvent): void {
@@ -204,7 +204,7 @@ index adff09d..634cda1 100644
      if (this.loadingPersistedHistory && event.type === "provider_subagent") {
        this.persistedProviderSubagentEvents.push(event);
        return;
-@@ -5247,9 +5259,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+@@ -5290,9 +5302,7 @@ export class CodexAppServerAgentSession implements AgentSession {
          this.handlePlanUpdatedNotification(parsed);
          return;
        case "diff_updated":
@@ -215,7 +215,7 @@ index adff09d..634cda1 100644
          return;
        case "token_usage_updated":
          this.handleTokenUsageUpdatedNotification(parsed);
-@@ -5924,6 +5934,7 @@ export class CodexAppServerAgentSession implements AgentSession {
+@@ -5968,6 +5978,7 @@ export class CodexAppServerAgentSession implements AgentSession {
    }
  
    private resetTurnTrackingState(): void {
@@ -223,7 +223,7 @@ index adff09d..634cda1 100644
      this.latestPlanResult = null;
      this.emittedItemStartedIds.clear();
      this.emittedItemCompletedIds.clear();
-@@ -5942,6 +5953,14 @@ export class CodexAppServerAgentSession implements AgentSession {
+@@ -5986,6 +5997,14 @@ export class CodexAppServerAgentSession implements AgentSession {
      this.unpairedCompactionItemCompletions = 0;
    }
  
@@ -267,7 +267,7 @@ index 766ccc0..cc09258 100644
    } else if (event.type === "permission_requested") {
      lifecycle.emit("agent.permission_requested", { agent, request: event.request });
 diff --git a/public-docs/plugins/v0.8/reference.md b/public-docs/plugins/v0.8/reference.md
-index 2cad2a1..02a2ed2 100644
+index 3677956..c83e4d7 100644
 --- a/public-docs/plugins/v0.8/reference.md
 +++ b/public-docs/plugins/v0.8/reference.md
 @@ -425,20 +425,27 @@ plans, and mode changes; requesting permission does not end the turn.

@@ -2,7 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { settingsSchema, summarySchema, type Settings, type Summary } from "../shared/contracts";
+import {
+  nativeStatusSchema,
+  settingsSchema,
+  summarySchema,
+  type Settings,
+  type Summary,
+} from "../shared/contracts";
 
 const snapshotSchema = z.object({ text: z.string(), mode: z.number().int() });
 export const recordSchema = summarySchema.extend({
@@ -64,6 +70,30 @@ export class Store {
   async save(record: Record): Promise<void> {
     const valid = recordSchema.parse(record);
     await this.atomicWrite(`records/${valid.id}.json`, JSON.stringify(valid));
+  }
+
+  async nativeStatus(): Promise<z.infer<typeof nativeStatusSchema>> {
+    try {
+      return nativeStatusSchema.parse(
+        JSON.parse(await readFile(path.join(this.directory, "native-status.json"), "utf8")),
+      );
+    } catch (error) {
+      if (isMissing(error)) return {};
+      throw error;
+    }
+  }
+
+  async observeNative(provider: string, available: boolean) {
+    await this.exclusive("native-status", async () => {
+      const current = await this.nativeStatus();
+      await this.atomicWrite(
+        "native-status.json",
+        JSON.stringify({
+          ...current,
+          [provider]: { available, observedAt: new Date().toISOString() },
+        }),
+      );
+    });
   }
 
   async get(id: string, agentId: string): Promise<Record> {

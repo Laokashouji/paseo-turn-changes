@@ -1,4 +1,5 @@
 {
   "id": "turn-changes",
-  "requirements": { "paseo": ">=0.8.0-beta.1" }
+  "requirements": { "paseo": ">=0.8.0 <0.9.0" },
+  "build": [["npm", "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]]
 }

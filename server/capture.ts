@@ -40,11 +40,17 @@ export class Capture {
     timelineIssue?: string,
     timeline?: Record["timeline"],
   ): Promise<Record> {
+    await this.store.observeNative(event.agent.provider, event.nativeDiff !== undefined);
     let initial = this.active.get(event.agent.id);
     const missingStart = !initial || initial.turnId !== event.turnId;
     if (missingStart) {
-      await this.start(event);
-      initial = this.active.get(event.agent.id)!;
+      initial = (await this.store.list(event.agent.id)).find(
+        (record) => !record.finishedAt && record.turnId === event.turnId,
+      );
+      if (!initial) {
+        await this.start(event);
+        initial = this.active.get(event.agent.id)!;
+      }
     }
     const record: Record = {
       ...initial!,
@@ -54,16 +60,16 @@ export class Capture {
       files: [],
       ...(timeline ? { timeline } : {}),
     };
-    if (missingStart) record.issues.push("缺少本轮开始记录，使用当前配置生成预览，撤销不可用。");
+    if (missingStart) record.issues.push("本轮记录期间插件曾停止或缺少开始事件，撤销不可用。");
     try {
       const edits = editsFromItems(items);
       if (record.source === "native") {
         if (typeof event.nativeDiff === "string") {
           record.files = await nativeFiles(record.cwd, event.nativeDiff);
-        } else if (edits.length || timelineIssue) {
+        } else if (event.nativeDiff === undefined || edits.length || timelineIssue) {
           record.issues.push(
             event.nativeDiff === undefined
-              ? "当前 Paseo 未转发原生本轮差异，需要安装接入层补丁。"
+              ? "当前 Paseo 未转发原生本轮差异。官方 0.8.0 仍需加载接入补丁；未自动切换来源。"
               : "执行后端未提供本轮差异，无法生成完整改动记录。",
           );
         }
@@ -77,7 +83,6 @@ export class Capture {
     const complete =
       record.issues.length === 0 && record.files.every((file) => file.issue === null);
     record.canUndo = complete && record.files.length > 0;
-    if (!complete) record.outcome = "incomplete";
     await this.store.save(record);
     if (this.active.get(event.agent.id)?.id === initial!.id) this.active.delete(event.agent.id);
     return record;

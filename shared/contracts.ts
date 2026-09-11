@@ -40,6 +40,19 @@ export const cardSchema = z.object({ recordId: z.string().uuid() });
 const recordInput = z.object({ recordId: z.string().uuid(), agentId: z.string() });
 const settingsDocument = z.object({ revision: z.string(), values: settingsSchema });
 
+export const nativeStatusSchema = z.record(
+  z.string(),
+  z.object({
+    available: z.boolean(),
+    observedAt: z.string(),
+  }),
+);
+export const getNativeStatus = defineRpc({
+  name: "sources.native-status",
+  input: z.object({}),
+  output: nativeStatusSchema,
+});
+
 export const readSettings = defineRpc({
   name: "sources.read",
   input: z.object({}),

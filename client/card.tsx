@@ -85,12 +85,23 @@ function CardBody(
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "600" }}>
-              已编辑 {summary.files.length} 个文件
+              {summary.finishedAt === ""
+                ? "正在记录本轮改动"
+                : summary.files.length
+                  ? `已编辑 ${summary.files.length} 个文件`
+                  : "本轮改动未完整记录"}
             </Text>
             {known && summary.files.length > 0 ? (
               <Counts theme={theme} additions={additions} deletions={deletions} />
             ) : (
-              <Text style={{ color: colors.statusWarning, fontSize: 12 }}>改动记录不完整</Text>
+              <Text
+                style={{
+                  color: summary.finishedAt ? colors.statusWarning : colors.foregroundMuted,
+                  fontSize: 12,
+                }}
+              >
+                {summary.finishedAt ? "改动记录不完整" : "轮次结束后生成文件列表"}
+              </Text>
             )}
           </View>
           {!layout.compact && (

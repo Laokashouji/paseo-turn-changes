@@ -1,7 +1,7 @@
-import type { PaseoApi } from "@getpaseo/client";
+import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 
 export async function turnItems(
-  paseo: PaseoApi,
+  paseo: PluginHandlerContext["paseo"],
   agentId: string,
   turnId: string | null,
   previous?: { epoch: string; maxSeq: number },

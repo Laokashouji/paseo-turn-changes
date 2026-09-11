@@ -79,6 +79,8 @@ export function createFixture() {
       return record;
     }
     if (method === "sources.read") return settings;
+    if (method === "sources.native-status")
+      return { codex: { available: false, observedAt: "2026-09-11T08:00:00Z" } };
     if (method === "sources.save") {
       if (input.revision !== settings.revision)
         throw new Error("设置已在另一处修改，请刷新后重新保存。");

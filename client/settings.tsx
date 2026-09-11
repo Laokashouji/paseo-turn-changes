@@ -8,7 +8,13 @@ import {
   SettingsSelect,
   SettingsInput,
 } from "@getpaseo/plugin/client/ui";
-import { readSettings, saveSettings, type Settings, type Source } from "../shared/contracts";
+import {
+  getNativeStatus,
+  readSettings,
+  saveSettings,
+  type Settings,
+  type Source,
+} from "../shared/contracts";
 import { Action } from "./card";
 
 const options: { label: string; value: Source }[] = [
@@ -19,6 +25,8 @@ const options: { label: string; value: Source }[] = [
 export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
   const read = useRpc(readSettings);
   const save = useRpc(saveSettings);
+  const readNative = useRpc(getNativeStatus);
+  const native = useQuery({ queryKey: [host.id, "native-status"], queryFn: () => readNative({}) });
   const queries = useQueryClient();
   const key = [host.id, "turn-changes-settings"];
   const query = useQuery({ queryKey: key, queryFn: () => read({}) });
@@ -48,16 +56,36 @@ export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
       <SettingsSection title="数据来源">
         <SettingsCard>
           {Object.entries(values.providers).map(([id, source]) => (
-            <SettingsSelect
-              key={id}
-              label={id}
-              value={source}
-              options={options}
-              disabled={mutation.isPending}
-              onValueChange={(next) =>
-                mutation.mutate({ ...values, providers: { ...values.providers, [id]: next } })
-              }
-            />
+            <View key={id} style={{ gap: 8 }}>
+              <SettingsSelect
+                label={id}
+                value={source}
+                options={options}
+                disabled={mutation.isPending}
+                onValueChange={(next) =>
+                  mutation.mutate({ ...values, providers: { ...values.providers, [id]: next } })
+                }
+              />
+              {source === "native" && (
+                <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+                  {native.isError
+                    ? `原生数据状态读取失败：${native.error.message}`
+                    : native.data?.[id]
+                      ? `最近一轮：${native.data[id].available ? "已接收到原生接口信号" : "未提供原生接口信号，需要接入补丁"}（${new Date(native.data[id].observedAt).toLocaleString()}）`
+                      : "尚未确认原生接口。启用后完成一轮对话即可检查。"}
+                </Text>
+              )}
+              <Action
+                theme={theme}
+                label={`移除 ${id} 单独配置`}
+                disabled={mutation.isPending}
+                onPress={() => {
+                  const providers = { ...values.providers };
+                  delete providers[id];
+                  mutation.mutate({ ...values, providers });
+                }}
+              />
+            </View>
           ))}
           <SettingsSelect
             label="其他执行后端"
@@ -68,11 +96,13 @@ export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
           />
         </SettingsCard>
       </SettingsSection>
+      <Action theme={theme} label="刷新原生数据状态" onPress={() => void native.refetch()} />
       <SettingsSection title="添加单独配置">
         <SettingsCard>
           <SettingsInput
             label="执行后端编号"
             placeholder="例如 claude 或 claude-super-relay"
+            initialValue=""
             onChangeText={setProvider}
             disabled={mutation.isPending}
           />
@@ -81,7 +111,10 @@ export function SourcesSettings({ theme, host }: PluginSurfaceProps) {
           theme={theme}
           label="添加配置"
           disabled={
-            mutation.isPending || !provider.trim() || Boolean(values.providers[provider.trim()])
+            mutation.isPending ||
+            !provider.trim() ||
+            provider.trim().length > 120 ||
+            Object.hasOwn(values.providers, provider.trim())
           }
           onPress={() =>
             mutation.mutate({
