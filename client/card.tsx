@@ -1,20 +1,31 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useRpc,
+  useAgent,
   type PluginHostProps,
   type PluginTimelineItemProps,
 } from "@getpaseo/plugin/client";
 import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
 import { getSummary, undoChanges, type Summary } from "../shared/contracts";
 import { Review } from "./review";
+import { ReviewNavigation } from "./review-navigation";
 
 export function TurnCard(props: PluginTimelineItemProps<{ recordId: string }>) {
-  return <RecordCard {...props} recordId={props.item.data.recordId} />;
+  const workspaceId = useAgent(props.agentId, (agent) => agent.workspaceId);
+  return (
+    <RecordCard
+      {...props}
+      workspaceId={workspaceId ?? undefined}
+      recordId={props.item.data.recordId}
+    />
+  );
 }
 
-export function RecordCard(props: PluginHostProps & { agentId: string; recordId: string }) {
+export function RecordCard(
+  props: PluginHostProps & { agentId: string; recordId: string; workspaceId?: string },
+) {
   const { theme, host, agentId, recordId } = props;
   const read = useRpc(getSummary);
   const query = useQuery({
@@ -36,13 +47,32 @@ export function RecordCard(props: PluginHostProps & { agentId: string; recordId:
 }
 
 function CardBody(
-  props: PluginHostProps & { agentId: string; recordId: string; summary: Summary },
+  props: PluginHostProps & {
+    agentId: string;
+    recordId: string;
+    summary: Summary;
+    workspaceId?: string;
+  },
 ) {
   const { theme, layout, host, agentId, recordId, summary } = props;
   const colors = theme.colors;
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [confirmUndo, setConfirmUndo] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const navigation = useContext(ReviewNavigation);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  function openReview(index: number) {
+    setNavigationError(null);
+    if (!navigation || !props.workspaceId) {
+      setReviewIndex(index);
+      return;
+    }
+    try {
+      navigation.open(props.workspaceId, agentId, { recordId, index });
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : String(error));
+    }
+  }
   const undo = useRpc(undoChanges);
   const queries = useQueryClient();
   const mutation = useMutation({
@@ -100,7 +130,7 @@ function CardBody(
                   fontSize: 12,
                 }}
               >
-                {summary.finishedAt ? "改动记录不完整" : "轮次结束后生成文件列表"}
+                {summary.finishedAt ? "部分文件仅提供编辑内容" : "轮次结束后生成文件列表"}
               </Text>
             )}
           </View>
@@ -109,7 +139,7 @@ function CardBody(
               theme={theme}
               summary={summary}
               undo={() => setConfirmUndo(true)}
-              review={() => setReviewIndex(0)}
+              review={() => openReview(0)}
             />
           )}
         </View>
@@ -118,7 +148,7 @@ function CardBody(
             theme={theme}
             summary={summary}
             undo={() => setConfirmUndo(true)}
-            review={() => setReviewIndex(0)}
+            review={() => openReview(0)}
           />
         )}
         <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
@@ -135,13 +165,14 @@ function CardBody(
             {issue}
           </Text>
         ))}
+        {navigationError && <Text style={{ color: colors.statusDanger }}>{navigationError}</Text>}
       </View>
       {visible.map((file, index) => (
         <Pressable
           key={file.path}
           accessibilityRole="button"
           accessibilityLabel={`查看 ${file.path} 的本轮差异`}
-          onPress={() => setReviewIndex(index)}
+          onPress={() => openReview(index)}
           style={{
             borderTopWidth: 1,
             borderColor: colors.border,
@@ -163,7 +194,13 @@ function CardBody(
             )}
           </View>
           {file.issue && (
-            <Text style={{ color: colors.statusWarning, fontSize: 11 }}>{file.issue}</Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
+              {file.reviewKind === "edits"
+                ? "可查看编辑记录 · 无法自动撤销"
+                : file.reviewKind === "content"
+                  ? "可查看修改后内容 · 缺少修改前内容"
+                  : file.issue}
+            </Text>
           )}
         </Pressable>
       ))}

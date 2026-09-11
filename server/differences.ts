@@ -14,6 +14,7 @@ type File = Record["files"][number];
 export type Edit =
   | { kind: "patch"; path: string; patch: StructuredPatch; oldMode?: number }
   | { kind: "replace"; path: string; oldText: string; newText: string }
+  | { kind: "content"; path: string; text: string }
   | { kind: "unknown"; path: string; reason: string };
 
 function fileName(name: string | undefined): string | null {
@@ -126,7 +127,7 @@ export async function nativeFiles(cwd: string, diff: string): Promise<File[]> {
   });
 }
 
-function patchCounts(patch: StructuredPatch) {
+export function patchCounts(patch: StructuredPatch) {
   let additions = 0;
   let deletions = 0;
   for (const hunk of patch.hunks)
@@ -172,6 +173,8 @@ export function editsFromItems(items: readonly unknown[]): Edit[] {
         oldText: detail.oldString,
         newText: detail.newString,
       });
+    } else if (detail.type === "edit" && detail.newString !== undefined) {
+      edits.push({ kind: "content", path: name, text: detail.newString });
     } else if (detail.type === "edit" || detail.type === "write") {
       edits.push({
         kind: "unknown",
@@ -197,7 +200,10 @@ export async function reconstruct(cwd: string, edits: Edit[]): Promise<File[]> {
   for (const [name, changes] of grouped) {
     const file = await reconstructFile(cwd, name, changes);
     totalBytes +=
-      Buffer.byteLength(file.before?.text ?? "") + Buffer.byteLength(file.after?.text ?? "");
+      Buffer.byteLength(file.before?.text ?? "") +
+      Buffer.byteLength(file.after?.text ?? "") +
+      Buffer.byteLength(file.patch) +
+      Buffer.byteLength(file.content ?? "");
     if (totalBytes > 12 * MAX_FILE_BYTES) throw new Error("本轮快照超过 24 MiB，未生成完整记录。");
     if (file.issue || file.patch) files.push(file);
   }
@@ -223,6 +229,8 @@ async function reconstructFile(cwd: string, name: string, changes: Edit[]): Prom
     let originalMode = after?.mode;
     for (const change of [...changes].reverse()) {
       if (change.kind === "unknown") throw new Error(change.reason);
+      if (change.kind === "content")
+        throw new Error("编辑记录只有修改后内容，无法确认修改前的状态。");
       if (change.kind === "replace") {
         if (!exists) throw new Error("编辑后的文件不存在。");
         if (!change.newText || text.split(change.newText).length !== 2)
@@ -265,11 +273,34 @@ async function reconstructFile(cwd: string, name: string, changes: Edit[]): Prom
         : null;
     return { ...base, before, after, additions, deletions, issue, patch: changed ? patch : "" };
   } catch (error) {
-    const patches = changes
-      .filter((change) => change.kind === "patch")
-      .map((change) => formatPatch(change.patch));
-    return { ...base, issue: message(error), patch: patches.join("\n") };
+    return { ...base, issue: message(error), ...recordedEdits(name, changes) };
   }
+}
+
+// Recorded text remains useful for review even when today's file cannot be reversed safely.
+export function recordedEdits(name: string, changes: Edit[]): Pick<File, "patch" | "content"> {
+  const patches: string[] = [];
+  let content: string | undefined;
+  for (const change of changes) {
+    if (change.kind === "patch") {
+      patches.push(formatPatch(change.patch));
+      if (content !== undefined) {
+        const next = applyPatch(content, change.patch, {
+          fuzzFactor: 0,
+          autoConvertLineEndings: false,
+        });
+        content = next === false ? undefined : next;
+      }
+    } else if (change.kind === "replace") {
+      patches.push(createTwoFilesPatch(name, name, change.oldText, change.newText));
+      content = undefined;
+    } else if (change.kind === "content") {
+      content = Buffer.byteLength(change.text) <= MAX_FILE_BYTES ? change.text : undefined;
+    } else {
+      content = undefined;
+    }
+  }
+  return { patch: patches.join("\n"), ...(content !== undefined ? { content } : {}) };
 }
 
 export function message(error: unknown): string {

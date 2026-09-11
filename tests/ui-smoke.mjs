@@ -65,12 +65,23 @@ try {
   assert.ok(document.body.textContent.includes("−2"));
   click("审核");
   await until(() => document.body.textContent.includes("const source = 'native';"));
+  assert.deepEqual(JSON.parse(JSON.stringify(dom.window.TurnPreview.openedPanels[0])), {
+    id: "review",
+    workspaceId: "preview-workspace",
+    agentId: "preview-agent",
+    location: "explorer",
+  });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.ok(document.querySelector('[aria-label="原行号 1"]'));
   assert.ok(document.querySelector('[aria-label="新行号 1"]'));
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
-  click("关闭弹窗");
-  await until(() => !document.querySelector('[role="dialog"]'));
+  click("关闭审核面板");
+  await until(() => !document.querySelector("aside"));
+  click("查看 src/agent/change-tracker.ts 的本轮差异");
+  await until(() => document.body.textContent.includes("const source = 'native';"));
+  click("关闭审核面板");
+  await until(() => !document.querySelector("aside"));
   dom.window.TurnPreview.fixture.state.failUndo = true;
   click("撤销");
   await until(() => document.body.textContent.includes("确认撤销"));
@@ -106,6 +117,8 @@ try {
     assertions: [
       "file totals",
       "review file navigation",
+      "review opens native explorer location with correct workspace and agent",
+      "file click updates the existing review selection",
       "original and updated line numbers",
       "undo conflict message",
       "undo success",

@@ -19,6 +19,7 @@ export const recordSchema = summarySchema.extend({
   files: z.array(
     summarySchema.shape.files.element.extend({
       patch: z.string(),
+      content: z.string().optional(),
       before: snapshotSchema.nullable(),
       after: snapshotSchema.nullable(),
     }),

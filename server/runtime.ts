@@ -16,6 +16,7 @@ import { message } from "./differences";
 import { Store, summarize } from "./store";
 import { turnItems } from "./timeline";
 import { undo } from "./undo";
+import { reviewRecord } from "./review";
 
 export function contribute(server: PluginServerContext) {
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
@@ -39,11 +40,29 @@ export function contribute(server: PluginServerContext) {
   server.handle(readSettings, () => store.readSettings());
   server.handle(getNativeStatus, () => store.nativeStatus());
   server.handle(saveSettings, (input) => store.saveSettings(input.revision, input.values));
-  server.handle(getSummary, async (input) =>
-    summarize(await store.get(input.recordId, input.agentId)),
+  async function forReview(
+    record: Awaited<ReturnType<Store["get"]>>,
+    paseo: Parameters<typeof turnItems>[0],
+  ) {
+    if (record.timeline && record.files.some((file) => !file.patch && file.content === undefined)) {
+      try {
+        const loaded = await turnItems(paseo, record.agentId, record.turnId);
+        if (
+          loaded.timeline.epoch === record.timeline.epoch &&
+          loaded.timeline.maxSeq === record.timeline.maxSeq
+        )
+          return reviewRecord(record, loaded.items);
+      } catch {
+        /* Stored evidence is still available after a timeline is archived or replaced. */
+      }
+    }
+    return reviewRecord(record);
+  }
+  server.handle(getSummary, async (input, { paseo }) =>
+    summarize(await forReview(await store.get(input.recordId, input.agentId), paseo)),
   );
-  server.handle(getFile, async (input) => {
-    const record = await store.get(input.recordId, input.agentId);
+  server.handle(getFile, async (input, { paseo }) => {
+    const record = await forReview(await store.get(input.recordId, input.agentId), paseo);
     const file = record.files[input.index];
     if (!file) throw new Error("未找到这条文件改动。");
     return {
@@ -53,12 +72,14 @@ export function contribute(server: PluginServerContext) {
       deletions: file.deletions,
       issue: file.issue,
       patch: file.patch,
+      content: file.content,
+      reviewKind: file.reviewKind,
     };
   });
   server.handle(listChanges, async (input) =>
     (await store.list(input.agentId))
       .filter((record) => record.files.length || record.issues.length)
-      .map(summarize),
+      .map((record) => summarize(reviewRecord(record))),
   );
   server.handle(undoChanges, async (input, { paseo }) => {
     const record = await store.get(input.recordId, input.agentId);

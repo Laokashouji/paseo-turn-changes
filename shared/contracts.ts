@@ -22,6 +22,7 @@ export const fileSummarySchema = z.object({
   additions: z.number().int().nonnegative().nullable(),
   deletions: z.number().int().nonnegative().nullable(),
   issue: z.string().nullable(),
+  reviewKind: z.enum(["net", "edits", "content", "unavailable"]).optional(),
 });
 export const summarySchema = z.object({
   id: z.string().uuid(),
@@ -74,7 +75,7 @@ export const getSummary = defineRpc({
 export const getFile = defineRpc({
   name: "changes.file",
   input: recordInput.extend({ index: z.number().int().nonnegative() }),
-  output: fileSummarySchema.extend({ patch: z.string() }),
+  output: fileSummarySchema.extend({ patch: z.string(), content: z.string().optional() }),
 });
 export const undoChanges = defineRpc({
   name: "changes.undo",

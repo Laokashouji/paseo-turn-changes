@@ -14,6 +14,7 @@ export function Review(
     summary: Summary;
     index: number;
     setIndex: (index: number) => void;
+    fill?: boolean;
   },
 ) {
   const { theme, host, layout, agentId, recordId, summary, index, setIndex } = props;
@@ -23,11 +24,27 @@ export function Review(
     queryKey: [host.id, "turn-file", agentId, recordId, index],
     queryFn: () => read({ agentId, recordId, index }),
   });
-  const lines = useMemo(() => diffLines(query.data?.patch ?? ""), [query.data?.patch]);
+  const lines = useMemo(
+    () =>
+      query.data?.content !== undefined && !query.data.patch
+        ? query.data.content
+            .split("\n")
+            .map((text, index) => ({
+              text,
+              oldLine: null,
+              newLine: index + 1,
+              kind: "context" as const,
+            }))
+        : diffLines(query.data?.patch ?? ""),
+    [query.data?.patch, query.data?.content],
+  );
   return (
     <View
+      testID="turn-changes-review"
       style={{
-        height: Math.min(layout.compact ? 430 : 600, Math.max(180, height - 200)),
+        ...(props.fill
+          ? { flex: 1, minHeight: 0 }
+          : { height: Math.min(layout.compact ? 430 : 600, Math.max(180, height - 200)) }),
         backgroundColor: theme.colors.surface0,
       }}
     >
@@ -37,7 +54,7 @@ export function Review(
         <Text selectable style={{ color: theme.colors.foreground, fontSize: 13 }}>
           {summary.files[index]?.path}
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
           <Action
             theme={theme}
             label="上一个文件"
@@ -55,6 +72,16 @@ export function Review(
           />
         </View>
       </View>
+      {query.data?.reviewKind === "edits" && (
+        <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>
+          以下按编辑顺序展示记录。增删行数是这些记录的合计，可能包含重复修改及格式化前的内容。
+        </Text>
+      )}
+      {query.data?.reviewKind === "content" && (
+        <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>
+          工具只提供了修改后内容，无法计算增删行数。
+        </Text>
+      )}
       {query.isPending && (
         <Text style={{ color: theme.colors.foregroundMuted, padding: 16 }}>正在读取差异…</Text>
       )}
@@ -66,6 +93,11 @@ export function Review(
       )}
       {query.data?.issue && (
         <Text style={{ color: theme.colors.statusWarning, padding: 12 }}>{query.data.issue}</Text>
+      )}
+      {query.data?.reviewKind === "unavailable" && (
+        <Text style={{ color: theme.colors.foregroundMuted, padding: 16 }}>
+          本条记录没有可展示的差异或文件内容。
+        </Text>
       )}
       {query.data && (
         <FlatList
