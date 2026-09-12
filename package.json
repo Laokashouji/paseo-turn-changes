@@ -11,6 +11,7 @@
     "test:ui": "node tests/ui-smoke.mjs"
   },
   "dependencies": {
+    "@getpaseo/highlight": "0.8.0",
     "diff": "8.0.2"
   },
   "devDependencies": {

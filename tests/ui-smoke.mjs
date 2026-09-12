@@ -74,6 +74,9 @@ try {
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.ok(document.querySelector('[aria-label="原行号 1"]'));
   assert.ok(document.querySelector('[aria-label="新行号 1"]'));
+  assert.ok(document.querySelector('[data-testid="turn-diff-add"]'));
+  assert.ok(document.querySelector('[data-testid="turn-diff-delete"]'));
+  assert.equal(document.body.textContent.includes("--- src/"), false);
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
   click("关闭审核面板");
@@ -93,6 +96,12 @@ try {
     () =>
       !document.querySelector('[role="dialog"]') && document.body.textContent.includes("已撤销"),
   );
+  const disabledUndo = document.querySelector('[aria-label="已撤销"]');
+  assert.equal(disabledUndo.getAttribute("aria-disabled"), "true");
+  assert.equal(disabledUndo.parentElement.title, "本轮改动已经撤销。");
+  assert.equal(document.body.textContent.includes("本轮改动已经撤销。"), false);
+  disabledUndo.click();
+  assert.equal(document.querySelector('[role="dialog"]'), null);
   click("手机宽度");
   click("浅色");
   await until(() => document.body.textContent.includes("桌面宽度"));
@@ -128,6 +137,8 @@ try {
       "review opens native explorer location with correct workspace and agent",
       "file click updates the existing review selection",
       "original and updated line numbers",
+      "colored diff rows omit raw patch headers",
+      "disabled undo exposes hover reason without persistent warning or click action",
       "undo conflict message",
       "undo success",
       "compact/light render",

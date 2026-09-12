@@ -11,6 +11,8 @@ import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
 import { getSummary, undoChanges, type Summary } from "../shared/contracts";
 import { Review } from "./review";
 import { ReviewNavigation } from "./review-navigation";
+import { setHoverHint } from "./web";
+import { undoHint } from "../shared/undo-hint";
 
 export function TurnCard(props: PluginTimelineItemProps<{ recordId: string }>) {
   const workspaceId = useAgent(props.agentId, (agent) => agent.workspaceId);
@@ -123,20 +125,16 @@ function CardBody(
             </Text>
             {known && summary.files.length > 0 ? (
               <Counts theme={theme} additions={additions} deletions={deletions} />
-            ) : (
+            ) : !summary.finishedAt ? (
               <Text
                 style={{
                   color: summary.finishedAt ? colors.statusWarning : colors.foregroundMuted,
                   fontSize: 12,
                 }}
               >
-                {summary.finishedAt
-                  ? summary.files.length
-                    ? "部分文件仅提供编辑内容"
-                    : "改动记录不完整"
-                  : "轮次结束后生成文件列表"}
+                轮次结束后生成文件列表
               </Text>
-            )}
+            ) : null}
           </View>
           {!layout.compact && (
             <Actions
@@ -164,11 +162,6 @@ function CardBody(
           {summary.outcome === "canceled" ? " · 本轮已中断" : ""}
           {summary.undoneAt ? " · 已撤销" : ""}
         </Text>
-        {summary.issues.map((issue, index) => (
-          <Text key={index} style={{ color: colors.statusWarning, fontSize: 12 }}>
-            {issue}
-          </Text>
-        ))}
         {navigationError && <Text style={{ color: colors.statusDanger }}>{navigationError}</Text>}
       </View>
       {visible.map((file, index) => (
@@ -197,15 +190,6 @@ function CardBody(
               <Counts theme={theme} additions={file.additions} deletions={file.deletions} />
             )}
           </View>
-          {file.issue && (
-            <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
-              {file.reviewKind === "edits"
-                ? "可查看编辑记录 · 无法自动撤销"
-                : file.reviewKind === "content"
-                  ? "可查看修改后内容 · 缺少修改前内容"
-                  : file.issue}
-            </Text>
-          )}
         </Pressable>
       ))}
       {summary.files.length > 6 && (
@@ -281,6 +265,7 @@ function Actions({
         theme={theme}
         label={summary.undoneAt ? "已撤销" : "撤销"}
         disabled={!summary.canUndo}
+        hint={undoHint(summary)}
         onPress={undo}
       />
       <Action theme={theme} label="审核" disabled={summary.files.length === 0} onPress={review} />
@@ -293,30 +278,35 @@ export function Action({
   label,
   onPress,
   disabled = false,
+  hint,
 }: {
   theme: PluginHostProps["theme"];
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  hint?: string;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      onPress={onPress}
-      disabled={disabled}
-      style={{
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 8,
-        opacity: disabled ? 0.45 : 1,
-      }}
-    >
-      <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{label}</Text>
-    </Pressable>
+    <View ref={(node) => setHoverHint(node, disabled ? hint : undefined)}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled }}
+        accessibilityHint={disabled ? hint : undefined}
+        onPress={onPress}
+        disabled={disabled}
+        style={{
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          borderRadius: 8,
+          opacity: disabled ? 0.45 : 1,
+        }}
+      >
+        <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{label}</Text>
+      </Pressable>
+    </View>
   );
 }
 

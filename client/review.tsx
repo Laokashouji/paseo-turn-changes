@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRpc, type PluginHostProps } from "@getpaseo/plugin/client";
 import { FlatList } from "@getpaseo/plugin/client/react-native";
 import { getFile, type Summary } from "../shared/contracts";
 import { Action } from "./card";
-import { diffLines } from "../shared/diff-lines";
+import { reviewLines } from "./review-lines";
+import { syntaxColor } from "./syntax-color";
 
 export function Review(
   props: PluginHostProps & {
@@ -26,17 +27,8 @@ export function Review(
   });
   const lines = useMemo(
     () =>
-      query.data?.content !== undefined && !query.data.patch
-        ? query.data.content
-            .split("\n")
-            .map((text, index) => ({
-              text,
-              oldLine: null,
-              newLine: index + 1,
-              kind: "context" as const,
-            }))
-        : diffLines(query.data?.patch ?? ""),
-    [query.data?.patch, query.data?.content],
+      reviewLines(query.data?.patch ?? "", query.data?.content, summary.files[index]?.path ?? ""),
+    [query.data?.patch, query.data?.content, summary.files, index],
   );
   return (
     <View
@@ -74,13 +66,11 @@ export function Review(
       </View>
       {query.data?.reviewKind === "edits" && (
         <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>
-          以下按编辑顺序展示记录。增删行数是这些记录的合计，可能包含重复修改及格式化前的内容。
+          编辑记录 · 行数为各次编辑合计
         </Text>
       )}
       {query.data?.reviewKind === "content" && (
-        <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>
-          工具只提供了修改后内容，无法计算增删行数。
-        </Text>
+        <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>修改后内容</Text>
       )}
       {query.isPending && (
         <Text style={{ color: theme.colors.foregroundMuted, padding: 16 }}>正在读取差异…</Text>
@@ -90,9 +80,6 @@ export function Review(
           <Text style={{ color: theme.colors.statusDanger }}>{query.error.message}</Text>
           <Action theme={theme} label="重试" onPress={() => void query.refetch()} />
         </View>
-      )}
-      {query.data?.issue && (
-        <Text style={{ color: theme.colors.statusWarning, padding: 12 }}>{query.data.issue}</Text>
       )}
       {query.data?.reviewKind === "unavailable" && (
         <Text style={{ color: theme.colors.foregroundMuted, padding: 16 }}>
@@ -105,51 +92,84 @@ export function Review(
           data={lines}
           keyExtractor={(_, line) => String(line)}
           renderItem={({ item: line }) => {
-            let color = theme.colors.foreground;
-            if (line.kind === "add") color = theme.colors.statusSuccess;
-            if (line.kind === "delete") color = theme.colors.statusDanger;
-            if (line.kind === "meta") color = theme.colors.foregroundMuted;
-            return (
-              <View style={{ flexDirection: "row", paddingHorizontal: 8 }}>
+            if (line.kind === "meta")
+              return (
                 <Text
-                  accessibilityLabel={line.oldLine === null ? "" : `原行号 ${line.oldLine}`}
                   style={{
                     color: theme.colors.foregroundMuted,
-                    width: 42,
-                    textAlign: "right",
-                    fontFamily: "monospace",
-                    fontSize: 11,
-                    lineHeight: 20,
+                    backgroundColor: theme.colors.surface2,
+                    fontSize: 12,
+                    padding: 10,
+                    marginVertical: 6,
+                    marginHorizontal: 6,
+                    borderRadius: 8,
                   }}
                 >
-                  {line.oldLine ?? ""}
+                  {line.text}
                 </Text>
+              );
+            const changed = line.kind === "add" || line.kind === "delete";
+            const color =
+              line.kind === "add"
+                ? theme.colors.statusSuccess
+                : line.kind === "delete"
+                  ? theme.colors.statusDanger
+                  : theme.colors.foregroundMuted;
+            const number = line.kind === "delete" ? line.oldLine : line.newLine;
+            return (
+              <View
+                testID={`turn-diff-${line.kind}`}
+                style={{
+                  flexDirection: "row",
+                  borderLeftWidth: 3,
+                  borderLeftColor: changed ? color : "transparent",
+                  minHeight: 22,
+                }}
+              >
+                {changed && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      StyleSheet.absoluteFillObject,
+                      { backgroundColor: color, opacity: 0.13 },
+                    ]}
+                  />
+                )}
                 <Text
-                  accessibilityLabel={line.newLine === null ? "" : `新行号 ${line.newLine}`}
+                  accessibilityLabel={
+                    number === null ? "" : `${line.kind === "delete" ? "原" : "新"}行号 ${number}`
+                  }
                   style={{
-                    color: theme.colors.foregroundMuted,
-                    width: 42,
+                    color,
+                    width: layout.compact ? 42 : 52,
+                    paddingRight: 10,
                     textAlign: "right",
                     fontFamily: "monospace",
-                    fontSize: 11,
-                    lineHeight: 20,
+                    fontSize: 12,
+                    lineHeight: 22,
                   }}
                 >
-                  {line.newLine ?? ""}
+                  {number ?? ""}
                 </Text>
                 <Text
                   selectable
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    color,
+                    color: theme.colors.foreground,
                     fontFamily: layout.platform === "ios" ? "Menlo" : "monospace",
-                    fontSize: 12,
-                    lineHeight: 20,
-                    paddingHorizontal: 12,
+                    fontSize: 13,
+                    lineHeight: 22,
+                    paddingHorizontal: layout.compact ? 8 : 12,
                   }}
                 >
-                  {line.text || " "}
+                  {line.tokens?.length
+                    ? line.tokens.map((token, index) => (
+                        <Text key={index} style={{ color: syntaxColor(token.style, theme.colors) }}>
+                          {token.text || " "}
+                        </Text>
+                      ))
+                    : line.text || " "}
                 </Text>
               </View>
             );
