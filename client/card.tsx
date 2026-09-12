@@ -128,7 +128,7 @@ function CardBody(
             ) : !summary.finishedAt ? (
               <Text
                 style={{
-                  color: summary.finishedAt ? colors.statusWarning : colors.foregroundMuted,
+                  color: colors.foregroundMuted,
                   fontSize: 12,
                 }}
               >

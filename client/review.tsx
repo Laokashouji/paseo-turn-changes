@@ -21,6 +21,7 @@ export function Review(
   const { theme, host, layout, agentId, recordId, summary, index, setIndex } = props;
   const read = useRpc(getFile);
   const { height } = useWindowDimensions();
+  const fontFamily = layout.platform === "ios" ? "Menlo" : "monospace";
   const query = useQuery({
     queryKey: [host.id, "turn-file", agentId, recordId, index],
     queryFn: () => read({ agentId, recordId, index }),
@@ -157,7 +158,7 @@ export function Review(
                     flex: 1,
                     minWidth: 0,
                     color: theme.colors.foreground,
-                    fontFamily: layout.platform === "ios" ? "Menlo" : "monospace",
+                    fontFamily,
                     fontSize: 13,
                     lineHeight: 22,
                     paddingHorizontal: layout.compact ? 8 : 12,
@@ -165,7 +166,10 @@ export function Review(
                 >
                   {line.tokens?.length
                     ? line.tokens.map((token, index) => (
-                        <Text key={index} style={{ color: syntaxColor(token.style, theme.colors) }}>
+                        <Text
+                          key={index}
+                          style={{ color: syntaxColor(token.style, theme.colors), fontFamily }}
+                        >
                           {token.text || " "}
                         </Text>
                       ))
