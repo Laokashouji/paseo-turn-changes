@@ -79,6 +79,30 @@ try {
   assert.equal(document.body.textContent.includes("--- src/"), false);
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
+  click("显示文件列表");
+  await until(() => document.querySelector('[data-testid="turn-file-tree"]'));
+  click("收起目录 src/agent");
+  await until(() => !document.querySelector('[aria-label="选择文件 src/agent/change-tracker.ts"]'));
+  click("展开目录 src/agent");
+  await until(() => document.querySelector('[aria-label="选择文件 src/agent/change-tracker.ts"]'));
+  click("选择文件 src/agent/change-tracker.ts");
+  await until(() => !document.querySelector('[data-testid="turn-file-tree"]'));
+  await until(() => document.body.textContent.includes("const source = 'native';"));
+  click("显示文件列表");
+  await until(() => document.querySelector('[aria-label="筛选改动文件"]'));
+  const search = document.querySelector('[aria-label="筛选改动文件"]');
+  const setInput = Object.getOwnPropertyDescriptor(
+    dom.window.HTMLInputElement.prototype,
+    "value",
+  ).set;
+  setInput.call(search, "missing-file");
+  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await until(() => document.body.textContent.includes("没有匹配的文件"));
+  setInput.call(search, "readme");
+  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await until(() => document.querySelectorAll('[data-testid="turn-file-entry"]').length === 1);
+  click("选择文件 README.md");
+  await until(() => document.body.textContent.includes("按轮次展示文件差异"));
   click("关闭审核面板");
   await until(() => !document.querySelector("aside"));
   click("查看 src/agent/change-tracker.ts 的本轮差异");
@@ -134,6 +158,7 @@ try {
     assertions: [
       "file totals",
       "review file navigation",
+      "directory collapse and expand, path search, empty search and direct file selection",
       "review opens native explorer location with correct workspace and agent",
       "file click updates the existing review selection",
       "original and updated line numbers",

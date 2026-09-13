@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { Text, View } from "react-native";
-export { FlatList, ScrollView } from "react-native";
+export { FlatList, ScrollView, TextInput } from "react-native";
 
 // Test-only replacements for components injected by the Paseo client.
 export function Icon({ color, size }: { name: string; color?: string; size?: number }) {
