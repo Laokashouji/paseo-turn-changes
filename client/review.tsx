@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRpc, type PluginHostProps } from "@getpaseo/plugin/client";
 import { FlatList, Icon } from "@getpaseo/plugin/client/react-native";
-import { getFile, type Summary } from "../shared/contracts";
+import { getFile, getSource, type Summary } from "../shared/contracts";
 import { Action, Counts } from "./card";
 import { reviewLines } from "./review-lines";
 import { syntaxColor } from "./syntax-color";
 import { FileTree } from "./file-tree";
+import { openSourceFile, setHoverHint } from "./web";
 
 export function Review(
   props: PluginHostProps & {
@@ -21,11 +22,19 @@ export function Review(
 ) {
   const { theme, host, layout, agentId, recordId, summary, index, setIndex } = props;
   const read = useRpc(getFile);
+  const source = useRpc(getSource);
+  const open = useMutation({
+    mutationFn: async (index: number) => {
+      const target = await source({ agentId, recordId, index });
+      await openSourceFile(host.id, target.workspaceId, target.encodedPath);
+    },
+  });
   const { height } = useWindowDimensions();
   const [panelWidth, setPanelWidth] = useState(0);
   const [treeHidden, setTreeHidden] = useState(false);
   const [fileListOpen, setFileListOpen] = useState(false);
   useEffect(() => setFileListOpen(false), [recordId, index]);
+  useEffect(() => open.reset(), [recordId, index]);
   const wide = panelWidth >= 680 && !layout.compact;
   const showTree = wide ? !treeHidden : fileListOpen;
   const selectedFile = summary.files[index];
@@ -130,6 +139,16 @@ export function Review(
                   deletions={selectedFile.deletions}
                 />
               )}
+              <Pressable
+                ref={(node) => setHoverHint(node, "打开源文件")}
+                accessibilityRole="button"
+                accessibilityLabel="打开源文件"
+                disabled={open.isPending}
+                onPress={() => open.mutate(index)}
+                style={{ padding: 8, opacity: open.isPending ? 0.4 : 1 }}
+              >
+                <Icon name="SquareArrowOutUpRight" size={17} color={theme.colors.foregroundMuted} />
+              </Pressable>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <Pressable
@@ -157,6 +176,11 @@ export function Review(
               </Pressable>
             </View>
           </View>
+          {open.isError && (
+            <Text style={{ color: theme.colors.statusDanger, padding: 12 }}>
+              {open.error.message}
+            </Text>
+          )}
           {query.data?.reviewKind === "edits" && (
             <Text style={{ color: theme.colors.foregroundMuted, padding: 12 }}>
               编辑记录 · 行数为各次编辑合计

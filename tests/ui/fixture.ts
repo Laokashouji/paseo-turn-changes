@@ -66,6 +66,8 @@ export function createFixture() {
     const input = raw as { index?: number; revision?: string; values?: Settings };
     if (method === "changes.read") return record;
     if (method === "changes.list") return [record];
+    if (method === "changes.source")
+      throw new Error("源文件已删除或移动，未找到可打开的实际文件。");
     if (method === "changes.file") {
       const file = files[input.index!];
       return {

@@ -77,8 +77,12 @@ try {
   assert.ok(document.querySelector('[data-testid="turn-diff-add"]'));
   assert.ok(document.querySelector('[data-testid="turn-diff-delete"]'));
   assert.equal(document.body.textContent.includes("--- src/"), false);
+  click("打开源文件");
+  await until(() => document.body.textContent.includes("源文件已删除或移动"));
+  assert.ok(dom.window.TurnPreview.fixture.state.calls.includes("changes.source"));
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
+  assert.equal(document.body.textContent.includes("源文件已删除或移动"), false);
   click("显示文件列表");
   await until(() => document.querySelector('[data-testid="turn-file-tree"]'));
   click("收起目录 src/agent");
@@ -158,6 +162,7 @@ try {
     assertions: [
       "file totals",
       "review file navigation",
+      "source button invokes the selected file RPC and clears errors on file change",
       "directory collapse and expand, path search, empty search and direct file selection",
       "review opens native explorer location with correct workspace and agent",
       "file click updates the existing review selection",

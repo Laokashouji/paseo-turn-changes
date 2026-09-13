@@ -10,6 +10,7 @@ import {
   saveSettings,
   undoChanges,
   getNativeStatus,
+  getSource,
 } from "../shared/contracts";
 import { Capture } from "./capture";
 import { message } from "./differences";
@@ -17,6 +18,8 @@ import { Store, summarize } from "./store";
 import { turnItems } from "./timeline";
 import { undo } from "./undo";
 import { reviewRecord } from "./review";
+import { readCodexRecordedItems } from "./codex-records";
+import { resolveSource } from "./source";
 
 export function contribute(server: PluginServerContext) {
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
@@ -40,18 +43,29 @@ export function contribute(server: PluginServerContext) {
   server.handle(readSettings, () => store.readSettings());
   server.handle(getNativeStatus, () => store.nativeStatus());
   server.handle(saveSettings, (input) => store.saveSettings(input.revision, input.values));
+  async function enrich(items: unknown[], agentId: string, paseo: Parameters<typeof turnItems>[0]) {
+    try {
+      const current = await paseo.agents.ref(agentId).refresh();
+      const persistence = current?.agent.persistence;
+      return current?.agent.provider === "codex" && persistence?.sessionId
+        ? await readCodexRecordedItems(items, persistence.sessionId, current.agent.cwd)
+        : items;
+    } catch {
+      return items;
+    }
+  }
   async function forReview(
     record: Awaited<ReturnType<Store["get"]>>,
     paseo: Parameters<typeof turnItems>[0],
   ) {
-    if (record.timeline && record.files.some((file) => !file.patch && file.content === undefined)) {
+    if (record.timeline && record.files.some((file) => !file.patch)) {
       try {
         const loaded = await turnItems(paseo, record.agentId, record.turnId);
         if (
           loaded.timeline.epoch === record.timeline.epoch &&
           loaded.timeline.maxSeq === record.timeline.maxSeq
         )
-          return reviewRecord(record, loaded.items);
+          return reviewRecord(record, await enrich(loaded.items, record.agentId, paseo));
       } catch {
         /* Stored evidence is still available after a timeline is archived or replaced. */
       }
@@ -74,6 +88,19 @@ export function contribute(server: PluginServerContext) {
       patch: file.patch,
       content: file.content,
       reviewKind: file.reviewKind,
+    };
+  });
+  server.handle(getSource, async (input, { paseo }) => {
+    const record = await store.get(input.recordId, input.agentId);
+    const file = record.files[input.index];
+    if (!file) throw new Error("未找到这条文件改动。");
+    const source = await resolveSource(record.cwd, file.path, home);
+    const workspace = await paseo.workspaces.open({ cwd: source.cwd });
+    return {
+      workspaceId: workspace.id,
+      path: source.path,
+      absolutePath: source.absolutePath,
+      encodedPath: Buffer.from(source.path).toString("base64url"),
     };
   });
   server.handle(listChanges, async (input) =>
@@ -110,7 +137,7 @@ export function contribute(server: PluginServerContext) {
           (record) => record.finishedAt && record.timeline,
         );
         const loaded = await turnItems(paseo, event.agent.id, event.turnId, previous?.timeline);
-        items = loaded.items;
+        items = await enrich(loaded.items, event.agent.id, paseo);
         timeline = loaded.timeline;
       } catch (error) {
         issue = message(error);
