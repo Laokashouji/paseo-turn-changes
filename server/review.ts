@@ -36,15 +36,40 @@ export function reviewFile(file: Record["files"][number]): Record["files"][numbe
   return { ...file, additions, deletions, reviewKind, issue };
 }
 
-// Enrich only existing files from the exact historical turn; never read current files or enable undo.
-export function reviewRecord(record: Record, items: readonly unknown[] = []): Record {
+// Append only paths newly recovered from a verified call, not net-zero files omitted at capture.
+export function reviewRecord(
+  record: Record,
+  items: readonly unknown[] = [],
+  originalItems: readonly unknown[] = items,
+): Record {
   const edits = editsFromItems(items);
+  const relative = (filePath: string) =>
+    path.relative(record.cwd, path.resolve(record.cwd, filePath));
+  const knownPaths = new Set([
+    ...record.files.map((file) => file.path),
+    ...editsFromItems(originalItems).map((edit) => relative(edit.path)),
+  ]);
+  const files = [...record.files];
+  for (const edit of edits) {
+    const filePath = relative(edit.path);
+    if (knownPaths.has(filePath)) continue;
+    knownPaths.add(filePath);
+    files.push({
+      path: filePath,
+      previousPath: null,
+      additions: null,
+      deletions: null,
+      patch: "",
+      before: null,
+      after: null,
+      issue: "从本轮工具记录补充的文件，自动撤销不可用。",
+    });
+  }
   return {
     ...record,
-    files: record.files.map((file) => {
-      const matching = edits.filter(
-        (edit) => path.relative(record.cwd, path.resolve(record.cwd, edit.path)) === file.path,
-      );
+    canUndo: record.canUndo && files.length === record.files.length,
+    files: files.map((file) => {
+      const matching = edits.filter((edit) => relative(edit.path) === file.path);
       const recovered = recordedEdits(file.path, matching);
       const result = reviewFile({
         ...file,

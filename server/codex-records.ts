@@ -7,6 +7,35 @@ import { createTwoFilesPatch } from "diff";
 import { z } from "zod";
 import { MAX_FILE_BYTES } from "./files";
 
+const providerSchema = z.object({
+  extends: z.string().optional(),
+  env: z.object({ CODEX_HOME: z.string().optional() }).optional(),
+});
+
+export function codexHomeFor(
+  provider: string,
+  providers: Record<string, unknown>,
+  fallback = process.env.CODEX_HOME || path.join(homedir(), ".codex"),
+): string | undefined {
+  const visited = new Set<string>();
+  let home: string | undefined;
+  while (!visited.has(provider)) {
+    visited.add(provider);
+    const parsed = providerSchema.safeParse(
+      Object.hasOwn(providers, provider) ? providers[provider] : {},
+    );
+    if (!parsed.success) return undefined;
+    const config = parsed.data;
+    // The derived provider's environment overrides its base provider's environment.
+    home ??= config?.env?.CODEX_HOME;
+    if (provider === "codex")
+      return path.isAbsolute(home ?? fallback) ? (home ?? fallback) : undefined;
+    if (!config?.extends) return undefined;
+    provider = config.extends;
+  }
+  return undefined;
+}
+
 const callSchema = z.object({
   type: z.literal("tool_call"),
   callId: z.string(),

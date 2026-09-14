@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { codexRecordedItems, readCodexRecordedItems } from "../server/codex-records";
+import { codexHomeFor, codexRecordedItems, readCodexRecordedItems } from "../server/codex-records";
 import { editsFromItems, recordedEdits } from "../server/differences";
 import { reviewRecord } from "../server/review";
 import type { Record } from "../server/store";
@@ -52,12 +52,68 @@ test("同一 Codex 调用补回新增差异和多文件，不伪造撤销快照"
       },
     ],
   } as Record;
-  const shown = reviewRecord(original, items);
+  const shown = reviewRecord(original, items, [call]);
+  assert.deepEqual(
+    shown.files.map((file) => file.path),
+    ["new.ts", "second.ts"],
+  );
+  assert.deepEqual([shown.files[1].additions, shown.files[1].deletions], [1, 0]);
   assert.deepEqual([shown.files[0].additions, shown.files[0].deletions], [2, 0]);
   assert.match(shown.files[0].patch, /--- \/dev\/null/);
   assert.equal(shown.files[0].before, null);
   assert.equal(shown.canUndo, false);
   assert.equal(original.files[0].patch, "");
+  assert.equal(original.files.length, 1);
+  assert.equal(reviewRecord(original, items).files.length, 1);
+});
+
+test("自定义后端按继承链及环境覆盖定位 Codex 日志，不按名称猜测", () => {
+  const providers = {
+    codex: { env: { CODEX_HOME: "/base" } },
+    primary: { extends: "codex", env: { CODEX_HOME: "/primary" } },
+    derived: { extends: "primary", env: { UNRELATED: "ignored" } },
+    final: { extends: "derived", env: { CODEX_HOME: "/final" } },
+    "codex-in-name": { extends: "claude", env: { CODEX_HOME: "/wrong" } },
+    cycle: { extends: "loop" },
+    loop: { extends: "cycle" },
+    invalid: { extends: "codex", env: { CODEX_HOME: 123 } },
+    relative: { extends: "codex", env: { CODEX_HOME: "relative" } },
+  };
+  assert.equal(codexHomeFor("codex", {}, "/default"), "/default");
+  assert.equal(codexHomeFor("codex", providers), "/base");
+  assert.equal(codexHomeFor("derived", providers), "/primary");
+  assert.equal(codexHomeFor("final", providers), "/final");
+  for (const provider of ["codex-in-name", "claude", "unknown", "cycle", "invalid", "relative"])
+    assert.equal(codexHomeFor(provider, providers), undefined, provider);
+});
+
+test("补回文件不复活原始时间线已有但净变化为零的文件，不改变已有索引", () => {
+  const original = {
+    cwd: "/repo",
+    source: "edits",
+    canUndo: true,
+    files: [
+      {
+        path: "last.ts",
+        patch: "",
+        before: null,
+        after: null,
+        additions: null,
+        deletions: null,
+        issue: null,
+      },
+    ],
+  } as Record;
+  const items = codexRecordedItems([call], [event], sessionId, "/repo");
+  const shown = reviewRecord(original, items, [call]);
+  assert.deepEqual(
+    shown.files.map((file) => file.path),
+    ["last.ts", "second.ts"],
+  );
+  assert.equal(shown.canUndo, false);
+  assert.equal(shown.files[1].before, null);
+  assert.equal(shown.files[1].after, null);
+  assert.equal(original.canUndo, true);
 });
 test("其他会话、调用、失败结果、无新增标记的正文均保留原记录", () => {
   assert.deepEqual(codexRecordedItems([call], [event], "another-session", "/repo"), [call]);

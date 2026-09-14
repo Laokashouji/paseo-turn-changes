@@ -19,7 +19,7 @@ import { Store, summarize } from "./store";
 import { turnItems } from "./timeline";
 import { undo } from "./undo";
 import { reviewRecord } from "./review";
-import { readCodexRecordedItems } from "./codex-records";
+import { codexHomeFor, readCodexRecordedItems } from "./codex-records";
 import { resolveSource, readSource, writeSource } from "./source";
 
 export function contribute(server: PluginServerContext) {
@@ -48,8 +48,11 @@ export function contribute(server: PluginServerContext) {
     try {
       const current = await paseo.agents.ref(agentId).refresh();
       const persistence = current?.agent.persistence;
-      return current?.agent.provider === "codex" && persistence?.sessionId
-        ? await readCodexRecordedItems(items, persistence.sessionId, current.agent.cwd)
+      if (!current || !persistence?.sessionId) return items;
+      const { config } = await paseo.config.get();
+      const codexHome = codexHomeFor(current.agent.provider, config.providers);
+      return codexHome
+        ? await readCodexRecordedItems(items, persistence.sessionId, current.agent.cwd, codexHome)
         : items;
     } catch {
       return items;
@@ -59,14 +62,21 @@ export function contribute(server: PluginServerContext) {
     record: Awaited<ReturnType<Store["get"]>>,
     paseo: Parameters<typeof turnItems>[0],
   ) {
-    if (record.timeline && record.files.some((file) => !file.patch)) {
+    if (
+      record.timeline &&
+      (record.source === "edits" || record.files.some((file) => !file.patch))
+    ) {
       try {
         const loaded = await turnItems(paseo, record.agentId, record.turnId);
         if (
           loaded.timeline.epoch === record.timeline.epoch &&
           loaded.timeline.maxSeq === record.timeline.maxSeq
         )
-          return reviewRecord(record, await enrich(loaded.items, record.agentId, paseo));
+          return reviewRecord(
+            record,
+            await enrich(loaded.items, record.agentId, paseo),
+            record.source === "edits" ? loaded.items : undefined,
+          );
       } catch {
         /* Stored evidence is still available after a timeline is archived or replaced. */
       }
@@ -91,15 +101,18 @@ export function contribute(server: PluginServerContext) {
       reviewKind: file.reviewKind,
     };
   });
-  async function sourceFor(input: { recordId: string; agentId: string; index: number }) {
-    const record = await store.get(input.recordId, input.agentId);
+  async function sourceFor(
+    input: { recordId: string; agentId: string; index: number },
+    paseo: Parameters<typeof turnItems>[0],
+  ) {
+    const record = await forReview(await store.get(input.recordId, input.agentId), paseo);
     const file = record.files[input.index];
     if (!file) throw new Error("未找到这条文件改动。");
     return resolveSource(record.cwd, file.path, home);
   }
-  server.handle(getSource, async (input) => readSource(await sourceFor(input)));
-  server.handle(saveSource, async (input) => {
-    const source = await sourceFor(input);
+  server.handle(getSource, async (input, { paseo }) => readSource(await sourceFor(input, paseo)));
+  server.handle(saveSource, async (input, { paseo }) => {
+    const source = await sourceFor(input, paseo);
     return store.exclusive(`source:${source.absolutePath}`, () => writeSource(source, input));
   });
   server.handle(listChanges, async (input) =>
@@ -109,6 +122,8 @@ export function contribute(server: PluginServerContext) {
   );
   server.handle(undoChanges, async (input, { paseo }) => {
     const record = await store.get(input.recordId, input.agentId);
+    if (record.canUndo && !(await forReview(record, paseo)).canUndo)
+      throw new Error("本轮补回的文件缺少撤销快照，自动撤销不可用。");
     const listing = await paseo.agents.list();
     if (listing.pageInfo.hasMore) throw new Error("无法完整确认正在运行的 Agent，请稍后再试。");
     const root = await realpath(record.cwd);
