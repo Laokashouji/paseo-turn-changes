@@ -91,8 +91,8 @@ export function contribute(server: PluginServerContext) {
     const file = record.files[input.index];
     if (!file) throw new Error("未找到这条文件改动。");
     return {
-      path: file.path,
-      previousPath: file.previousPath,
+      path: path.resolve(record.cwd, file.path),
+      previousPath: file.previousPath === null ? null : path.resolve(record.cwd, file.previousPath),
       additions: file.additions,
       deletions: file.deletions,
       issue: file.issue,

@@ -29,7 +29,14 @@ export type Record = z.infer<typeof recordSchema>;
 export type Snapshot = z.infer<typeof snapshotSchema>;
 
 export function summarize(record: Record): Summary {
-  return summarySchema.parse(record);
+  return summarySchema.parse({
+    ...record,
+    files: record.files.map((file) => ({
+      ...file,
+      path: path.resolve(record.cwd, file.path),
+      previousPath: file.previousPath === null ? null : path.resolve(record.cwd, file.previousPath),
+    })),
+  });
 }
 
 export class Store {

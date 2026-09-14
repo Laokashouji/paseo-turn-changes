@@ -36,7 +36,7 @@ export const lightTheme: PluginHostProps["theme"] = {
   },
 };
 export const recordId = "db0f9531-a05b-4689-a502-0555fb306c4f";
-const files = ["src/agent/change-tracker.ts", "README.md"].map((path) => ({
+const files = ["/repo/src/agent/change-tracker.ts", "/repo/README.md"].map((path) => ({
   path,
   previousPath: null,
   additions: 1,
@@ -49,7 +49,8 @@ export function createFixture() {
     id: recordId,
     agentId: "preview-agent",
     provider: "codex",
-    source: "native",
+    source: "edits",
+    requestedSource: "auto",
     startedAt: "2026-09-10T08:00:00Z",
     finishedAt: "2026-09-10T08:06:24Z",
     outcome: "completed",

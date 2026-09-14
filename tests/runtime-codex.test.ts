@@ -140,13 +140,14 @@ test("自定义 Codex 后端在历史审核、源文件读写及新轮次中使�
     assert.deepEqual(
       shown.files.map((file) => [file.path, file.additions, file.deletions]),
       [
-        ["first.txt", 1, 0],
-        ["../extra.txt", 2, 0],
+        [first, 1, 0],
+        [extra, 2, 0],
       ],
     );
     assert.equal(shown.canUndo, false);
     const selected = { ...input, index: 1 };
     const diff = getFile.output.parse(await invoke(getFile.name, selected));
+    assert.equal(diff.path, extra);
     assert.match(diff.patch, /\+extra\n\+line/);
     const source = getSource.output.parse(await invoke(getSource.name, selected));
     assert.equal(source.content, "extra\nline\n");

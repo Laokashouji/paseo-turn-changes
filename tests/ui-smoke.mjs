@@ -61,6 +61,10 @@ function click(label) {
 }
 try {
   await until(() => document.body.textContent.includes("已编辑 2 个文件"));
+  const card = document.querySelector('[data-testid="turn-changes-card"]');
+  assert.ok(card.textContent.includes("/repo/src/agent/change-tracker.ts"));
+  assert.equal(card.textContent.includes("文件编辑记录汇总"), false);
+  assert.equal(card.textContent.includes("自动选择"), false);
   assert.ok(document.body.textContent.includes("+2"));
   assert.ok(document.body.textContent.includes("−2"));
   click("审核");
@@ -115,11 +119,15 @@ try {
   assert.ok(document.body.textContent.includes("2 / 2"));
   click("显示文件列表");
   await until(() => document.querySelector('[data-testid="turn-file-tree"]'));
-  click("收起目录 src/agent");
-  await until(() => !document.querySelector('[aria-label="选择文件 src/agent/change-tracker.ts"]'));
-  click("展开目录 src/agent");
-  await until(() => document.querySelector('[aria-label="选择文件 src/agent/change-tracker.ts"]'));
-  click("选择文件 src/agent/change-tracker.ts");
+  click("收起目录 /repo/src/agent");
+  await until(
+    () => !document.querySelector('[aria-label="选择文件 /repo/src/agent/change-tracker.ts"]'),
+  );
+  click("展开目录 /repo/src/agent");
+  await until(() =>
+    document.querySelector('[aria-label="选择文件 /repo/src/agent/change-tracker.ts"]'),
+  );
+  click("选择文件 /repo/src/agent/change-tracker.ts");
   await until(() => !document.querySelector('[data-testid="turn-file-tree"]'));
   await until(() => document.body.textContent.includes("const source = 'native';"));
   click("显示文件列表");
@@ -135,11 +143,11 @@ try {
   setInput.call(search, "readme");
   search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   await until(() => document.querySelectorAll('[data-testid="turn-file-entry"]').length === 1);
-  click("选择文件 README.md");
+  click("选择文件 /repo/README.md");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
   click("关闭审核面板");
   await until(() => !document.querySelector("aside"));
-  click("查看 src/agent/change-tracker.ts 的本轮差异");
+  click("查看 /repo/src/agent/change-tracker.ts 的本轮差异");
   await until(() => document.body.textContent.includes("const source = 'native';"));
   click("关闭审核面板");
   await until(() => !document.querySelector("aside"));

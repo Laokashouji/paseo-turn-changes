@@ -89,6 +89,13 @@ function CardBody(
   const additions = summary.files.reduce((count, file) => count + (file.additions ?? 0), 0);
   const deletions = summary.files.reduce((count, file) => count + (file.deletions ?? 0), 0);
   const visible = showAll ? summary.files : summary.files.slice(0, 6);
+  const status = [
+    summary.outcome === "failed" ? "本轮执行失败" : "",
+    summary.outcome === "canceled" ? "本轮已中断" : "",
+    summary.undoneAt ? "已撤销" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <View
       testID="turn-changes-card"
@@ -153,15 +160,9 @@ function CardBody(
             review={() => openReview(0)}
           />
         )}
-        <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
-          {summary.source === "native"
-            ? `${summary.provider === "codex" ? "Codex" : summary.provider} 原生差异`
-            : "文件编辑记录汇总"}
-          {summary.requestedSource === "auto" ? " · 自动选择" : ""}
-          {summary.outcome === "failed" ? " · 本轮执行失败" : ""}
-          {summary.outcome === "canceled" ? " · 本轮已中断" : ""}
-          {summary.undoneAt ? " · 已撤销" : ""}
-        </Text>
+        {status ? (
+          <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>{status}</Text>
+        ) : null}
         {navigationError && <Text style={{ color: colors.statusDanger }}>{navigationError}</Text>}
       </View>
       {visible.map((file, index) => (
