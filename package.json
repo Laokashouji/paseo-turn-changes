@@ -1,6 +1,13 @@
 {
   "name": "paseo-turn-changes",
   "version": "0.1.0",
+  "description": "Review per-turn agent file changes in Paseo with inline diff cards, a file tree, guarded undo, and an in-panel source editor.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Laokashouji/paseo-turn-changes.git"
+  },
+  "homepage": "https://github.com/Laokashouji/paseo-turn-changes#readme",
+  "keywords": ["paseo", "paseo-plugin", "code-review", "diff", "codex", "claude"],
   "private": true,
   "type": "module",
   "scripts": {
