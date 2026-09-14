@@ -83,6 +83,36 @@ try {
   click("下一个文件");
   await until(() => document.body.textContent.includes("按轮次展示文件差异"));
   assert.equal(document.body.textContent.includes("源文件已删除或移动"), false);
+  dom.window.TurnPreview.fixture.state.failSource = false;
+  const panelCount = dom.window.TurnPreview.openedPanels.length;
+  click("打开源文件");
+  await until(() => document.querySelector('[data-testid="turn-source-input"]'));
+  assert.equal(dom.window.location.href, "http://localhost/");
+  assert.equal(dom.window.TurnPreview.openedPanels.length, panelCount);
+  assert.ok(document.querySelector('aside [data-testid="turn-source-editor"]'));
+  const sourceInput = document.querySelector('[data-testid="turn-source-input"]');
+  const setSource = (value) => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(
+      sourceInput,
+      value,
+    );
+    sourceInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  };
+  setSource("draft source\n");
+  await until(() => document.body.textContent.includes("未保存"));
+  click("返回差异");
+  await until(() => document.body.textContent.includes("还有未保存的修改"));
+  click("继续编辑");
+  dom.window.TurnPreview.fixture.state.sourceConflict = true;
+  click("保存");
+  await until(() => document.body.textContent.includes("草稿已保留"));
+  assert.equal(sourceInput.value, "draft source\n");
+  dom.window.TurnPreview.fixture.state.sourceConflict = false;
+  click("保存");
+  await until(() => document.body.textContent.includes("已保存"));
+  click("返回差异");
+  await until(() => !document.querySelector('[data-testid="turn-source-editor"]'));
+  assert.ok(document.body.textContent.includes("2 / 2"));
   click("显示文件列表");
   await until(() => document.querySelector('[data-testid="turn-file-tree"]'));
   click("收起目录 src/agent");
@@ -163,6 +193,7 @@ try {
       "file totals",
       "review file navigation",
       "source button invokes the selected file RPC and clears errors on file change",
+      "source editor stays in the review panel; save, conflict draft and return preserve workspace and file selection",
       "directory collapse and expand, path search, empty search and direct file selection",
       "review opens native explorer location with correct workspace and agent",
       "file click updates the existing review selection",

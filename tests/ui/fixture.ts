@@ -60,14 +60,28 @@ export function createFixture() {
     undoState: "ready",
   };
   let settings = { revision: "initial", values: settingsSchema.parse({}) };
-  const state = { failUndo: false, calls: [] as string[] };
+  const state = { failUndo: false, failSource: true, sourceConflict: false, calls: [] as string[] };
+  let source = {
+    path: "README.md",
+    absolutePath: "/repo/README.md",
+    content: "editable source\n",
+    revision: "one",
+  };
   async function invoke(method: string, raw: unknown): Promise<unknown> {
     state.calls.push(method);
-    const input = raw as { index?: number; revision?: string; values?: Settings };
+    const input = raw as { index?: number; revision?: string; values?: Settings; content?: string };
     if (method === "changes.read") return record;
     if (method === "changes.list") return [record];
-    if (method === "changes.source")
-      throw new Error("源文件已删除或移动，未找到可打开的实际文件。");
+    if (method === "changes.source") {
+      if (state.failSource) throw new Error("源文件已删除或移动，未找到可打开的实际文件。");
+      return source;
+    }
+    if (method === "changes.source.save") {
+      if (state.sourceConflict || input.revision !== source.revision)
+        throw new Error("源文件已在其他地方修改，未保存。草稿已保留。");
+      source = { ...source, content: input.content!, revision: source.revision + "-saved" };
+      return source;
+    }
     if (method === "changes.file") {
       const file = files[input.index!];
       return {

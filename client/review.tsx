@@ -3,12 +3,13 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-na
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRpc, type PluginHostProps } from "@getpaseo/plugin/client";
 import { FlatList, Icon } from "@getpaseo/plugin/client/react-native";
-import { getFile, getSource, type Summary } from "../shared/contracts";
+import { getFile, getSource, type Summary, type SourceDocument } from "../shared/contracts";
 import { Action, Counts } from "./card";
 import { reviewLines } from "./review-lines";
 import { syntaxColor } from "./syntax-color";
 import { FileTree } from "./file-tree";
-import { openSourceFile, setHoverHint } from "./web";
+import { setHoverHint } from "./web";
+import { SourceEditor } from "./source-editor";
 
 export function Review(
   props: PluginHostProps & {
@@ -23,11 +24,17 @@ export function Review(
   const { theme, host, layout, agentId, recordId, summary, index, setIndex } = props;
   const read = useRpc(getFile);
   const source = useRpc(getSource);
+  const [sourceDocument, setSourceDocument] = useState<{
+    recordId: string;
+    index: number;
+    document: SourceDocument;
+  } | null>(null);
   const open = useMutation({
     mutationFn: async (index: number) => {
-      const target = await source({ agentId, recordId, index });
-      await openSourceFile(host.id, target.workspaceId, target.encodedPath);
+      const document = await source({ agentId, recordId, index });
+      return { recordId, index, document };
     },
+    onSuccess: setSourceDocument,
   });
   const { height } = useWindowDimensions();
   const [panelWidth, setPanelWidth] = useState(0);
@@ -51,6 +58,14 @@ export function Review(
       reviewLines(query.data?.patch ?? "", query.data?.content, summary.files[index]?.path ?? ""),
     [query.data?.patch, query.data?.content, summary.files, index],
   );
+  if (sourceDocument && sourceDocument.recordId === recordId && sourceDocument.index === index)
+    return (
+      <SourceEditor
+        {...props}
+        document={sourceDocument.document}
+        onClose={() => setSourceDocument(null)}
+      />
+    );
   return (
     <View
       testID="turn-changes-review"

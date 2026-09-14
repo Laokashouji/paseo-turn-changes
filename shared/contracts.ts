@@ -77,15 +77,27 @@ export const getFile = defineRpc({
   input: recordInput.extend({ index: z.number().int().nonnegative() }),
   output: fileSummarySchema.extend({ patch: z.string(), content: z.string().optional() }),
 });
+export const sourceDocumentSchema = z.object({
+  path: z.string(),
+  absolutePath: z.string(),
+  content: z.string(),
+  revision: z.string(),
+});
+export type SourceDocument = z.infer<typeof sourceDocumentSchema>;
 export const getSource = defineRpc({
   name: "changes.source",
   input: recordInput.extend({ index: z.number().int().nonnegative() }),
-  output: z.object({
-    workspaceId: z.string(),
-    path: z.string(),
+  output: sourceDocumentSchema,
+});
+export const saveSource = defineRpc({
+  name: "changes.source.save",
+  input: recordInput.extend({
+    index: z.number().int().nonnegative(),
     absolutePath: z.string(),
-    encodedPath: z.string(),
+    revision: z.string(),
+    content: z.string().max(1024 * 1024),
   }),
+  output: sourceDocumentSchema,
 });
 export const undoChanges = defineRpc({
   name: "changes.undo",

@@ -11,6 +11,7 @@ import {
   undoChanges,
   getNativeStatus,
   getSource,
+  saveSource,
 } from "../shared/contracts";
 import { Capture } from "./capture";
 import { message } from "./differences";
@@ -19,7 +20,7 @@ import { turnItems } from "./timeline";
 import { undo } from "./undo";
 import { reviewRecord } from "./review";
 import { readCodexRecordedItems } from "./codex-records";
-import { resolveSource } from "./source";
+import { resolveSource, readSource, writeSource } from "./source";
 
 export function contribute(server: PluginServerContext) {
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
@@ -90,18 +91,16 @@ export function contribute(server: PluginServerContext) {
       reviewKind: file.reviewKind,
     };
   });
-  server.handle(getSource, async (input, { paseo }) => {
+  async function sourceFor(input: { recordId: string; agentId: string; index: number }) {
     const record = await store.get(input.recordId, input.agentId);
     const file = record.files[input.index];
     if (!file) throw new Error("未找到这条文件改动。");
-    const source = await resolveSource(record.cwd, file.path, home);
-    const workspace = await paseo.workspaces.open({ cwd: source.cwd });
-    return {
-      workspaceId: workspace.id,
-      path: source.path,
-      absolutePath: source.absolutePath,
-      encodedPath: Buffer.from(source.path).toString("base64url"),
-    };
+    return resolveSource(record.cwd, file.path, home);
+  }
+  server.handle(getSource, async (input) => readSource(await sourceFor(input)));
+  server.handle(saveSource, async (input) => {
+    const source = await sourceFor(input);
+    return store.exclusive(`source:${source.absolutePath}`, () => writeSource(source, input));
   });
   server.handle(listChanges, async (input) =>
     (await store.list(input.agentId))
