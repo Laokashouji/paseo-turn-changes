@@ -154,3 +154,7 @@ Paseo 补丁测试在其 `packages/server` 下运行：
 ```sh
 npx vitest run src/server/agent/providers/codex-app-server-agent.test.ts --bail=1
 ```
+
+## 许可证
+
+本插件采用 [Apache-2.0](LICENSE) 许可证。Paseo 接入补丁的上游版权与许可保留在 [patches/PASEO-LICENSE](patches/PASEO-LICENSE)。
