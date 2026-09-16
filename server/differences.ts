@@ -87,6 +87,14 @@ export function parseDiff(diff: string, fallbackPath?: string): Edit[] {
   });
   if (!parsed.length) throw new Error("未识别到有效的统一差异格式。");
   return parsed.map(({ patch, segment }) => {
+    if (
+      patch.hunks.some((hunk) =>
+        [hunk.oldStart, hunk.oldLines, hunk.newStart, hunk.newLines].some(
+          (value) => !Number.isSafeInteger(value) || value < 0,
+        ),
+      )
+    )
+      throw new Error("差异中的行号或行数无效。");
     const isGit =
       (patch.oldFileName?.startsWith("a/") && patch.newFileName?.startsWith("b/")) ||
       (patch.oldFileName?.startsWith("a/") && patch.newFileName === "/dev/null") ||
@@ -151,6 +159,7 @@ export function editsFromItems(items: readonly unknown[]): Edit[] {
         unifiedDiff?: string;
         oldString?: string;
         newString?: string;
+        content?: string;
       };
     };
     if (row.type !== "tool_call" || row.status !== "completed" || !row.detail?.filePath) continue;
@@ -158,11 +167,20 @@ export function editsFromItems(items: readonly unknown[]): Edit[] {
     const name = detail.filePath!;
     if (detail.type === "edit" && detail.unifiedDiff) {
       try {
-        edits.push(...parseDiff(detail.unifiedDiff, name));
+        const parsed = parseDiff(detail.unifiedDiff, name);
+        // Some providers put a numbered display diff here; prefer recorded text if it has no hunks.
+        if (parsed.some((edit) => edit.kind === "patch") || detail.newString === undefined) {
+          edits.push(...parsed);
+          continue;
+        }
       } catch (error) {
-        edits.push({ kind: "unknown", path: name, reason: message(error) });
+        if (detail.newString === undefined) {
+          edits.push({ kind: "unknown", path: name, reason: message(error) });
+          continue;
+        }
       }
-    } else if (
+    }
+    if (
       detail.type === "edit" &&
       detail.oldString !== undefined &&
       detail.newString !== undefined
@@ -175,6 +193,8 @@ export function editsFromItems(items: readonly unknown[]): Edit[] {
       });
     } else if (detail.type === "edit" && detail.newString !== undefined) {
       edits.push({ kind: "content", path: name, text: detail.newString });
+    } else if (detail.type === "write" && detail.content !== undefined) {
+      edits.push({ kind: "content", path: name, text: detail.content });
     } else if (detail.type === "edit" || detail.type === "write") {
       edits.push({
         kind: "unknown",

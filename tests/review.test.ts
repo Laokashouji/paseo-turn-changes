@@ -89,3 +89,102 @@ test("多次编辑的回退行数明确属于编辑记录合计，不能冒充�
   assert.deepEqual([shown.additions, shown.deletions], [2, 2]);
   assert.match(shown.patch, /middle/);
 });
+
+test("OMP 展示差异不覆盖前后文本，已中断轮次仍能恢复已完成编辑的行数", () => {
+  const record = {
+    cwd: "/repo",
+    source: "edits",
+    outcome: "canceled",
+    canUndo: false,
+    files: [
+      {
+        path: "config.yml",
+        previousPath: null,
+        patch: "",
+        before: null,
+        after: null,
+        additions: null,
+        deletions: null,
+        issue: "此改动没有文本差异，可能是二进制、权限或重命名操作。",
+      },
+    ],
+  } as Record;
+  const before = structuredClone(record);
+  for (const unifiedDiff of [
+    " 1|config:\n-2|  value: old\n+2|  value: new",
+    "@@ broken @@\n+new",
+  ]) {
+    const shown = reviewRecord(record, [
+      {
+        type: "tool_call",
+        status: "completed",
+        detail: {
+          type: "edit",
+          filePath: "/repo/config.yml",
+          unifiedDiff,
+          oldString: "config:\n  value: old\n",
+          newString: "config:\n  value: new\n",
+        },
+      },
+    ]);
+    assert.deepEqual([shown.files[0].additions, shown.files[0].deletions], [1, 1]);
+    assert.match(shown.files[0].patch, /-  value: old\n\+  value: new/);
+    assert.equal(shown.files[0].reviewKind, "edits");
+    assert.equal(shown.canUndo, false);
+    assert.deepEqual(record, before);
+  }
+});
+
+test("Write 正文可审核但不伪造新增行数，未完成和失败调用不纳入", async () => {
+  for (const content of ["first\nsecond\n", ""]) {
+    const call = {
+      type: "tool_call",
+      status: "completed",
+      detail: { type: "write", filePath: "/outside/written.txt", content },
+    };
+    const [file] = await reconstruct(os.tmpdir(), editsFromItems([call]));
+    const shown = reviewFile(file);
+    assert.equal(shown.reviewKind, "content");
+    assert.equal(shown.content, content);
+    assert.equal(shown.patch, "");
+    assert.equal(shown.additions, null);
+    assert.equal(shown.deletions, null);
+    for (const status of ["running", "failed", "canceled"])
+      assert.deepEqual(editsFromItems([{ ...call, status }]), []);
+    const historical = {
+      cwd: os.tmpdir(),
+      source: "edits",
+      canUndo: false,
+      files: [{ ...file, content: undefined }],
+    } as Record;
+    assert.equal(reviewRecord(historical, [call]).files[0].content, content);
+  }
+});
+
+test("有效统一差异仍然优先使用，缺少旧内容时不将展示差异当作补丁", () => {
+  const call = {
+    type: "tool_call",
+    status: "completed",
+    detail: {
+      type: "edit",
+      filePath: "a.txt",
+      oldString: "stale",
+      newString: "new\n",
+      unifiedDiff: createTwoFilesPatch("a.txt", "a.txt", "old\n", "new\n"),
+    },
+  };
+  assert.equal(editsFromItems([call])[0].kind, "patch");
+  assert.equal(
+    editsFromItems([
+      {
+        ...call,
+        detail: {
+          ...call.detail,
+          oldString: undefined,
+          unifiedDiff: "-1|old\n+1|new",
+        },
+      },
+    ])[0].kind,
+    "content",
+  );
+});
