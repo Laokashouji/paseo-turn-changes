@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import path from "node:path";
 import { homedir } from "node:os";
-import { createTwoFilesPatch } from "diff";
+import { createTwoFilesPatch, formatPatch, parsePatch } from "diff";
 import { z } from "zod";
 import { MAX_FILE_BYTES } from "./files";
 
@@ -57,6 +57,7 @@ const eventSchema = z.object({
           type: z.string(),
           content: z.string().optional(),
           unified_diff: z.string().optional(),
+          move_path: z.string().nullable().optional(),
         }),
       ),
     }),
@@ -93,7 +94,24 @@ export function codexRecordedItems(
         Buffer.byteLength(change.content) <= MAX_FILE_BYTES
       )
         unifiedDiff = createTwoFilesPatch("/dev/null", filePath, "", change.content);
-      else if (change.type === "update" && change.unified_diff) unifiedDiff = change.unified_diff;
+      else if (change.type === "update" && change.move_path) {
+        try {
+          const diff = change.unified_diff ?? "";
+          const patches = parsePatch(
+            !diff.trim() || diff.trimStart().startsWith("@@")
+              ? `--- ${filePath}\n+++ ${filePath}\n${diff}`
+              : diff,
+          );
+          if (patches.length === 1)
+            unifiedDiff = formatPatch({
+              ...patches[0],
+              oldFileName: filePath,
+              newFileName: change.move_path,
+            });
+        } catch {
+          /* Keep canonical evidence if the move's text diff cannot be decoded. */
+        }
+      } else if (change.type === "update" && change.unified_diff) unifiedDiff = change.unified_diff;
       else if (
         change.type === "delete" &&
         change.content !== undefined &&

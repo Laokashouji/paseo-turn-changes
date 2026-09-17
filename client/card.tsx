@@ -191,6 +191,15 @@ function CardBody(
               <Counts theme={theme} additions={file.additions} deletions={file.deletions} />
             )}
           </View>
+          {file.previousPath && (
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="middle"
+              style={{ color: colors.foregroundMuted, fontSize: 12 }}
+            >
+              重命名自 {file.previousPath}
+            </Text>
+          )}
         </Pressable>
       ))}
       {summary.files.length > 6 && (

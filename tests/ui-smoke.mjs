@@ -63,12 +63,16 @@ try {
   await until(() => document.body.textContent.includes("已编辑 2 个文件"));
   const card = document.querySelector('[data-testid="turn-changes-card"]');
   assert.ok(card.textContent.includes("/repo/src/agent/change-tracker.ts"));
+  assert.ok(card.textContent.includes("重命名自 /repo/src/agent/old-tracker.ts"));
   assert.equal(card.textContent.includes("文件编辑记录汇总"), false);
   assert.equal(card.textContent.includes("自动选择"), false);
   assert.ok(document.body.textContent.includes("+2"));
   assert.ok(document.body.textContent.includes("−2"));
   click("审核");
   await until(() => document.body.textContent.includes("const source = 'native';"));
+  assert.ok(
+    document.querySelector("aside").textContent.includes("重命名自 /repo/src/agent/old-tracker.ts"),
+  );
   assert.deepEqual(JSON.parse(JSON.stringify(dom.window.TurnPreview.openedPanels[0])), {
     id: "review",
     workspaceId: "preview-workspace",

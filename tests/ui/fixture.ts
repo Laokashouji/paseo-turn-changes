@@ -38,7 +38,7 @@ export const lightTheme: PluginHostProps["theme"] = {
 export const recordId = "db0f9531-a05b-4689-a502-0555fb306c4f";
 const files = ["/repo/src/agent/change-tracker.ts", "/repo/README.md"].map((path) => ({
   path,
-  previousPath: null,
+  previousPath: path.endsWith("change-tracker.ts") ? "/repo/src/agent/old-tracker.ts" : null,
   additions: 1,
   deletions: 1,
   issue: null,

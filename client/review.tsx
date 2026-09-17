@@ -165,6 +165,11 @@ export function Review(
                 <Icon name="SquareArrowOutUpRight" size={17} color={theme.colors.foregroundMuted} />
               </Pressable>
             </View>
+            {selectedFile?.previousPath && (
+              <Text selectable style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+                重命名自 {selectedFile.previousPath}
+              </Text>
+            )}
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <Pressable
                 accessibilityRole="button"

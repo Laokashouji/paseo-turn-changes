@@ -105,7 +105,11 @@ export function parseDiff(diff: string, fallbackPath?: string): Edit[] {
     }
     const name = fileName(patch.newFileName) ?? fileName(patch.oldFileName) ?? fallbackPath;
     if (!name) throw new Error("差异缺少文件路径。");
-    if (!patch.hunks.length)
+    const renamed =
+      fileName(patch.oldFileName) &&
+      fileName(patch.newFileName) &&
+      patch.oldFileName !== patch.newFileName;
+    if (!patch.hunks.length && !renamed)
       return {
         kind: "unknown",
         path: name,
@@ -241,11 +245,24 @@ async function reconstructFile(cwd: string, name: string, changes: Edit[]): Prom
     before: null,
     after: null,
   };
+  const move = changes.find(
+    (change) =>
+      change.kind === "patch" &&
+      fileName(change.patch.oldFileName) &&
+      fileName(change.patch.newFileName) &&
+      change.patch.oldFileName !== change.patch.newFileName,
+  );
+  if (move?.kind === "patch")
+    return {
+      ...base,
+      previousPath: path.relative(cwd, path.resolve(cwd, move.patch.oldFileName!)),
+      issue: "重命名改动暂不支持自动撤销。",
+      ...recordedEdits(name, changes),
+    };
   try {
     const after = await snapshot(cwd, name);
     let text = after?.text ?? "";
     let exists = after !== null;
-    let previousPath: string | null = null;
     let originalMode = after?.mode;
     for (const change of [...changes].reverse()) {
       if (change.kind === "unknown") throw new Error(change.reason);
@@ -270,10 +287,7 @@ async function reconstructFile(cwd: string, name: string, changes: Edit[]): Prom
       text = restored;
       exists = oldPath !== null;
       if (!exists && text !== "") throw new Error("新增文件还有未记录的内容。");
-      if (oldPath && newPath && oldPath !== newPath)
-        previousPath = path.relative(cwd, path.resolve(cwd, oldPath));
     }
-    if (previousPath) throw new Error("重命名改动暂不支持自动还原。");
     const before = exists ? { text, mode: originalMode ?? 0o644 } : null;
     const patch = createTwoFilesPatch(
       before ? name : "/dev/null",
