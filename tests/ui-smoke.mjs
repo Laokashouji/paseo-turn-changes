@@ -68,6 +68,24 @@ try {
   assert.equal(card.textContent.includes("自动选择"), false);
   assert.ok(document.body.textContent.includes("+2"));
   assert.ok(document.body.textContent.includes("−2"));
+  const filePath = card.querySelector('[data-testid="turn-file-path"]');
+  assert.equal(filePath.title, "/repo/src/agent/change-tracker.ts");
+  assert.equal(
+    filePath.querySelector('[data-testid="turn-file-basename"]').textContent,
+    "/change-tracker.ts",
+  );
+  click("复制完整路径 /repo/src/agent/change-tracker.ts");
+  await until(() => dom.window.TurnPreview.clipboard.text === "/repo/src/agent/change-tracker.ts");
+  assert.equal(dom.window.TurnPreview.openedPanels.length, 0);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  dom.window.TurnPreview.clipboard.fail = true;
+  click("复制完整路径 /repo/src/agent/old-tracker.ts");
+  await until(() => document.querySelector('[title="复制失败，点击重试"]'));
+  assert.equal(dom.window.TurnPreview.clipboard.text, "/repo/src/agent/change-tracker.ts");
+  dom.window.TurnPreview.clipboard.fail = false;
+  click("复制完整路径 /repo/src/agent/old-tracker.ts");
+  await until(() => dom.window.TurnPreview.clipboard.text === "/repo/src/agent/old-tracker.ts");
+  assert.equal(dom.window.TurnPreview.openedPanels.length, 0);
   click("审核");
   await until(() => document.body.textContent.includes("const source = 'native';"));
   assert.ok(
@@ -175,6 +193,17 @@ try {
   click("手机宽度");
   click("浅色");
   await until(() => document.body.textContent.includes("桌面宽度"));
+  const compactPath = document.querySelector('[data-testid="turn-file-path"]');
+  compactPath.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }));
+  await until(() => document.querySelector('[role="dialog"][aria-label="完整文件路径"]'));
+  compactPath.dispatchEvent(new dom.window.MouseEvent("mouseup", { bubbles: true, button: 0 }));
+  compactPath.click();
+  assert.equal(document.querySelector('[aria-label="本轮代码差异"]'), null);
+  click("复制路径");
+  await until(() => document.body.textContent.includes("已复制路径"));
+  assert.equal(dom.window.TurnPreview.clipboard.text, "/repo/src/agent/change-tracker.ts");
+  click("关闭弹窗");
+  await until(() => !document.querySelector('[role="dialog"]'));
   click("审核");
   await until(
     () =>
@@ -203,6 +232,8 @@ try {
     runtime: "jsdom + React Native Web; simulated host controls and RPC data",
     assertions: [
       "file totals",
+      "path hover exposes the absolute path; copy success, failure and retry do not open review",
+      "compact long press shows the full path and copies it without triggering review",
       "review file navigation",
       "source button invokes the selected file RPC and clears errors on file change",
       "source editor stays in the review panel; save, conflict draft and return preserve workspace and file selection",

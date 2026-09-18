@@ -11,6 +11,7 @@ import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
 import { getSummary, undoChanges, type Summary } from "../shared/contracts";
 import { Review } from "./review";
 import { ReviewNavigation } from "./review-navigation";
+import { FilePath } from "./file-path";
 import { setHoverHint } from "./web";
 import { undoHint } from "../shared/undo-hint";
 
@@ -166,11 +167,8 @@ function CardBody(
         {navigationError && <Text style={{ color: colors.statusDanger }}>{navigationError}</Text>}
       </View>
       {visible.map((file, index) => (
-        <Pressable
+        <View
           key={file.path}
-          accessibilityRole="button"
-          accessibilityLabel={`查看 ${file.path} 的本轮差异`}
-          onPress={() => openReview(index)}
           style={{
             borderTopWidth: 1,
             borderColor: colors.border,
@@ -180,27 +178,27 @@ function CardBody(
           }}
         >
           <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            <Text
-              numberOfLines={1}
-              ellipsizeMode="middle"
-              style={{ color: colors.foreground, fontSize: 13, flex: 1 }}
-            >
-              {file.path}
-            </Text>
+            <FilePath
+              path={file.path}
+              theme={theme}
+              compact={layout.compact}
+              onPress={() => openReview(index)}
+            />
             {file.additions !== null && file.deletions !== null && (
               <Counts theme={theme} additions={file.additions} deletions={file.deletions} />
             )}
           </View>
           {file.previousPath && (
-            <Text
-              numberOfLines={1}
-              ellipsizeMode="middle"
-              style={{ color: colors.foregroundMuted, fontSize: 12 }}
-            >
-              重命名自 {file.previousPath}
-            </Text>
+            <FilePath
+              path={file.previousPath}
+              prefix="重命名自 "
+              muted
+              theme={theme}
+              compact={layout.compact}
+              onPress={() => openReview(index)}
+            />
           )}
-        </Pressable>
+        </View>
       ))}
       {summary.files.length > 6 && (
         <View style={{ padding: 12 }}>

@@ -36,15 +36,17 @@ export const lightTheme: PluginHostProps["theme"] = {
   },
 };
 export const recordId = "db0f9531-a05b-4689-a502-0555fb306c4f";
-const files = ["/repo/src/agent/change-tracker.ts", "/repo/README.md"].map((path) => ({
-  path,
-  previousPath: path.endsWith("change-tracker.ts") ? "/repo/src/agent/old-tracker.ts" : null,
-  additions: 1,
-  deletions: 1,
-  issue: null,
-}));
-
-export function createFixture() {
+export function createFixture(longPaths = false) {
+  const directory = longPaths
+    ? "/Users/example/projects/review-workspace/packages/runtime/src/platforms/shared/agent"
+    : "/repo/src/agent";
+  const files = [`${directory}/change-tracker.ts`, "/repo/README.md"].map((path) => ({
+    path,
+    previousPath: path.endsWith("change-tracker.ts") ? `${directory}/old-tracker.ts` : null,
+    additions: 1,
+    deletions: 1,
+    issue: null,
+  }));
   let record: Summary = {
     id: recordId,
     agentId: "preview-agent",

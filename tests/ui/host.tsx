@@ -1,6 +1,13 @@
 import type { PropsWithChildren } from "react";
+import { createPortal } from "react-dom";
 import { Text, View } from "react-native";
 export { FlatList, ScrollView, TextInput } from "react-native";
+
+export const clipboard = { text: "", fail: false };
+export async function copyText(text: string) {
+  if (clipboard.fail) throw new Error("Clipboard unavailable");
+  clipboard.text = text;
+}
 
 // Test-only replacements for components injected by the Paseo client.
 export function Icon({ color, size }: { name: string; color?: string; size?: number }) {
@@ -14,7 +21,7 @@ export const Modal = Object.assign(
     children,
   }: PropsWithChildren<{ open: boolean; title: string; onOpenChange: (open: boolean) => void }>) {
     if (!open) return null;
-    return (
+    return createPortal(
       <div
         role="dialog"
         aria-label={title}
@@ -46,7 +53,8 @@ export const Modal = Object.assign(
           </div>
           {children}
         </div>
-      </div>
+      </div>,
+      document.getElementById("preview-overlays")!,
     );
   },
   {

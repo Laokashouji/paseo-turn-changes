@@ -7,8 +7,9 @@ import { SourcesSettings } from "../../client/settings";
 import { ReviewPanel } from "../../client/review-panel";
 import { createReviewNavigation, ReviewNavigation } from "../../client/review-navigation";
 import { createFixture, lightTheme, props, recordId } from "./fixture";
+export { clipboard } from "./host";
 
-export const fixture = createFixture();
+export const fixture = createFixture(new URLSearchParams(location.search).has("longPaths"));
 const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 export const openedPanels: unknown[] = [];
 let showPanel: (open: boolean) => void = () => {};
@@ -92,6 +93,7 @@ function Preview() {
           />
         </aside>
       )}
+      <div id="preview-overlays" />
     </div>
   );
 }
