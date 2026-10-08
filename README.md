@@ -12,10 +12,10 @@ Paseo 插件，按一轮 Agent 执行汇总文件改动。在回答后显示文�
 
 ## Install
 
-需要 Paseo 客户端与 daemon 均为 `0.8.x` 正式版，并已开启目标主机的插件功能。在连接该主机的 Paseo CLI 中运行：
+需要 Paseo 客户端与 daemon 均为 `0.8.x`–`0.11.x`，并已开启目标主机的插件功能。在连接该主机的 Paseo CLI 中运行：
 
 ```sh
-paseo plugin add Laokashouji/paseo-turn-changes
+paseo plugin add github:Laokashouji/paseo-turn-changes
 ```
 
 默认配置可直接使用官方 Paseo，无需宿主补丁：Codex 优先使用原生本轮差异，不可用时自动汇总文件编辑记录；其他执行后端默认汇总文件编辑记录。依赖在安装时按锁文件准备，无需发布到 npm。
@@ -28,7 +28,7 @@ paseo plugin update turn-changes
 
 ## Limitations
 
-- 插件接口限定为 `>=0.8.0 <0.9.0`；Codex 原生差异需要下文的可选接入补丁，默认自动模式无需补丁。
+- 插件接口限定为 `>=0.8.0 <0.12.0`；Codex 原生差异需要下文的可选接入补丁，默认自动模式无需补丁。
 - 纯插件模式依赖结构化文件编辑记录，无法完整追踪 Shell 直接写文件。
 - 记录不完整、工作目录外文件或文件已有后续修改时，不提供自动撤销；能获取的编辑内容仍可审核。
 - 界面当前为中文；已验证网页桌面和窄屏布局，Android、iOS 原生客户端尚未验收。
@@ -113,7 +113,7 @@ Codex 接入层只保留当前轮次最新的 `turn/diff/updated`，在完成、
 
 `patches/codex-turn-diff.patch` 包含 Paseo 源码上下文及本插件所需修改；上游版权与许可保留在 [patches/PASEO-LICENSE](patches/PASEO-LICENSE)。
 
-客户端和 daemon 需要匹配 Paseo 0.8 插件接口；清单要求 `>=0.8.0 <0.9.0`，不接受 0.7 或 0.8 beta。补丁基于官方 `v0.8.0`，提交 `b8e24677e12b226c7c38c1c3a40649daa9f1152f`，见 [patches/codex-turn-diff.patch](patches/codex-turn-diff.patch)。官方 0.8.0 仍会丢弃 Codex 原生累计差异事件；补丁改动 server 内部事件和插件服务端钩子，不修改客户端协议。
+客户端和 daemon 需要匹配 Paseo 0.8 插件接口；清单要求 `>=0.8.0 <0.12.0`，不接受 0.7 或 0.8 beta。补丁基于官方 `v0.8.0`，提交 `b8e24677e12b226c7c38c1c3a40649daa9f1152f`，见 [patches/codex-turn-diff.patch](patches/codex-turn-diff.patch)。官方 0.8.0 仍会丢弃 Codex 原生累计差异事件；补丁改动 server 内部事件和插件服务端钩子，不修改客户端协议。
 
 在对应 Paseo 源码根目录应用补丁并构建：
 
