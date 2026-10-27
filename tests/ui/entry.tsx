@@ -87,6 +87,11 @@ function Preview() {
           </button>
           <ReviewPanel
             {...hostProps}
+            {...{
+              params: { agentId: "preview-agent" },
+              revision: 0,
+              tab: { state: undefined, setState() {}, setModified() {} },
+            }}
             context="agent"
             workspaceId="preview-workspace"
             agentId="preview-agent"

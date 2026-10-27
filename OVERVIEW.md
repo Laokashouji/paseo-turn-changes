@@ -1,6 +1,6 @@
 Turn Changes summarizes the files an agent changed in each turn. A card in the conversation lists changed files and line counts. Open it to review that turn's diff, browse its file tree, edit a source file in the panel, or undo the whole turn after confirmation. The interface is in Chinese.
 
-The plugin supports Paseo 0.8 through 0.12 on both the app and daemon. Browser desktop and compact layouts have been tested; native Android and iOS have not. Each daemon keeps its own settings and history.
+The plugin supports Paseo 0.8 through 0.13 on both the app and daemon. Browser desktop and compact layouts have been tested; native Android and iOS have not. Each daemon keeps its own settings and history.
 
 By default, Codex uses a native turn diff when the host exposes one, otherwise it falls back to structured edit records. Other providers use edit records. Native Codex diffs need the optional host integration described in the repository; the plugin does not apply a host patch. The source can be configured per provider in the plugin settings. Shell writes without structured edit records can be missed.
 
